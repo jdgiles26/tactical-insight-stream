@@ -6,13 +6,14 @@ import {
   Search, 
   BarChart3, 
   Radio, 
-  Settings,
+  Map,
   Shield
 } from "lucide-react";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/ingest", label: "Data Ingestion", icon: Database },
+  { path: "/map", label: "Map View", icon: Map },
   { path: "/discovery", label: "Discovery", icon: Search },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/queue", label: "Processing Queue", icon: Radio },
