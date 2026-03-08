@@ -167,6 +167,9 @@ export default function IngestPage() {
           </div>
         </div>
       </div>
+
+      {/* Real-time Activity Feed */}
+      <ActivityFeed />
     </div>
   );
 }
