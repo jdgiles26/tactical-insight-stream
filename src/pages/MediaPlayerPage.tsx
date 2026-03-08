@@ -189,16 +189,13 @@ export default function MediaPlayerPage() {
 
   return (
     <div className="space-y-4 animate-slide-in">
-      {/* Header with badge */}
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <img src={saltwaterBadge} alt="Saltwater Recon" className="h-10 w-10 rounded-md shadow-md" />
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">Surveillance Grid</h2>
-            <p className="text-sm text-muted-foreground font-mono">
-              {sources.filter(Boolean).length} active feeds • {layoutConfig.value} layout • Caribbean & Americas
-            </p>
-          </div>
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Surveillance Grid</h2>
+          <p className="text-sm text-muted-foreground font-mono">
+            {sources.filter(Boolean).length} active feeds • {layoutConfig.value} layout • Caribbean & Americas
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={layout} onValueChange={handleLayoutChange}>
