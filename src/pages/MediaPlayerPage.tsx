@@ -113,13 +113,7 @@ function VideoCell({
         />
       )}
 
-      {/* Badge frame overlay — bottom-right corner */}
-      <img
-        src={saltwaterBadge}
-        alt="Saltwater Recon"
-        className="absolute bottom-1 right-1 h-7 w-7 opacity-70 pointer-events-none z-10 drop-shadow-md"
-      />
-
+      {/* No badge overlay — kept clean */}
       {/* Top label overlay */}
       <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-1.5 py-0.5 bg-gradient-to-b from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-20">
         <span className="text-[9px] font-mono text-foreground truncate">{source.label}</span>
