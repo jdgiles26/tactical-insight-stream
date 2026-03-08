@@ -88,17 +88,26 @@ function VideoCell({
     if (video) video.requestFullscreen?.();
   };
 
-  const isEmbed = source.type === "youtube" || source.type === "iframe";
+  const isYoutube = source.type === "youtube";
+  const isIframe = source.type === "iframe";
+  const isSrcImage = source.src.match(/\.(png|jpg|jpeg|gif|webp)$/i);
 
   return (
     <div className="relative group border border-border rounded-md overflow-hidden bg-background aspect-video">
-      {isEmbed ? (
+      {isSrcImage ? (
+        <div className="w-full h-full flex items-center justify-center bg-black">
+          <img src={source.src} alt={source.label} className="max-h-full max-w-full object-contain" />
+        </div>
+      ) : isYoutube ? (
         <iframe
-          src={
-            source.type === "youtube"
-              ? source.src.replace("watch?v=", "embed/") + "?autoplay=1&mute=1"
-              : source.src
-          }
+          src={source.src.replace("watch?v=", "embed/").replace("/live/", "/embed/") + "?autoplay=1&mute=1"}
+          className="w-full h-full"
+          allow="autoplay; encrypted-media"
+          allowFullScreen
+        />
+      ) : isIframe ? (
+        <iframe
+          src={source.src}
           className="w-full h-full"
           allow="autoplay; encrypted-media"
           allowFullScreen
