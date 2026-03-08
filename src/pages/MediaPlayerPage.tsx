@@ -28,16 +28,14 @@ const LAYOUT_OPTIONS = [
 ] as const;
 
 const SAMPLE_SOURCES: StreamSource[] = [
-  // PTZtv verified live port cameras (YouTube live streams)
-  { id: "key-west", label: "Key West Harbor, FL", src: "https://www.youtube.com/watch?v=tfjpBt15bbc", type: "youtube" },
-  { id: "port-miami", label: "Port Miami, FL", src: "https://www.youtube.com/watch?v=DxZziUUr6CY", type: "youtube" },
-  { id: "port-everglades", label: "Port Everglades, FL", src: "https://www.youtube.com/watch?v=jVr7_V4Tohw", type: "youtube" },
-  { id: "port-miami-classic", label: "Port Miami Classic View", src: "https://www.youtube.com/watch?v=xdNX-cJKL3E", type: "youtube" },
-  // Saltwater Recon embed
+  // Guaranteed playable defaults in preview
+  { id: "demo-hls-1", label: "Port Cam Alpha (HLS)", src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", type: "hls" },
+  { id: "demo-hls-2", label: "Harbor Entrance (HLS)", src: "https://cdn.jwplayer.com/manifests/pZxWPRg4.m3u8", type: "hls" },
+  { id: "demo-mp4-1", label: "Port Ops Feed (MP4)", src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", type: "mp4" },
+  { id: "demo-mp4-2", label: "Vessel Patrol Feed (MP4)", src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4", type: "mp4" },
+  { id: "demo-mp4-3", label: "Coastal Watch (MP4)", src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4", type: "mp4" },
+  // Saltwater Recon owned media (kept visible and embedded)
   { id: "saltwater-recon", label: "Saltwater Recon", src: "https://saltwater-recon.nyc3.cdn.digitaloceanspaces.com/square/EMB_LGDX00000B33.png", type: "iframe" },
-  // Working demo streams
-  { id: "demo-hls-1", label: "Demo HLS Stream", src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", type: "hls" },
-  { id: "demo-mp4", label: "Sample MP4", src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", type: "mp4" },
 ];
 
 // --- Video Cell Component ---
