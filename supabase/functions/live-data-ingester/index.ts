@@ -26,13 +26,17 @@ const SOURCES = {
 };
 
 const OPENSKY_REGIONS: Record<string, { lamin: number; lomin: number; lamax: number; lomax: number }> = {
+  caribbean_corridor: { lamin: 10, lomin: -90, lamax: 28, lomax: -60 },
+  gulf_of_mexico: { lamin: 18, lomin: -98, lamax: 31, lomax: -80 },
+  south_america_north: { lamin: -5, lomin: -82, lamax: 15, lomax: -50 },
+  puerto_rico_usvi: { lamin: 16, lomin: -68, lamax: 20, lomax: -64 },
+  us_east_coast: { lamin: 25, lomin: -82, lamax: 45, lomax: -65 },
+  us_west_coast: { lamin: 30, lomin: -130, lamax: 50, lomax: -115 },
   europe_med: { lamin: 30, lomin: -10, lamax: 60, lomax: 40 },
   middle_east: { lamin: 12, lomin: 30, lamax: 42, lomax: 65 },
   east_asia: { lamin: 10, lomin: 95, lamax: 50, lomax: 145 },
-  north_america: { lamin: 25, lomin: -130, lamax: 50, lomax: -60 },
   south_china_sea: { lamin: 0, lomin: 100, lamax: 25, lomax: 125 },
   horn_of_africa: { lamin: -5, lomin: 35, lamax: 20, lomax: 55 },
-  arctic: { lamin: 65, lomin: -180, lamax: 90, lomax: 180 },
   indo_pacific: { lamin: -15, lomin: 90, lamax: 30, lomax: 160 },
 };
 
