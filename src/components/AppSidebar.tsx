@@ -8,12 +8,18 @@ import {
   Radio, 
   Map,
   Plug,
-  Shield
+  Shield,
+  Upload,
+  Crosshair,
+  AlertTriangle
 } from "lucide-react";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/ingest", label: "Data Ingestion", icon: Database },
+  { path: "/upload", label: "Upload & Process", icon: Upload },
+  { path: "/intent", label: "Commander's Intent", icon: Crosshair },
+  { path: "/alerts", label: "Alerts", icon: AlertTriangle },
   { path: "/map", label: "Map View", icon: Map },
   { path: "/discovery", label: "Discovery", icon: Search },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
@@ -38,7 +44,7 @@ export function AppSidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navItems.map(({ path, label, icon: Icon }) => {
           const isActive = location.pathname === path;
           return (
