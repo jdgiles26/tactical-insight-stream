@@ -9,6 +9,7 @@ import IngestPage from "./pages/IngestPage";
 import DiscoveryPage from "./pages/DiscoveryPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import QueuePage from "./pages/QueuePage";
+import MapPage from "./pages/MapPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
