@@ -131,7 +131,7 @@ function VideoCell({
 
       {/* Controls overlay */}
       <div className="absolute bottom-0 left-0 right-8 flex items-center gap-0.5 p-1 bg-gradient-to-t from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-20">
-        {!isEmbed && (
+        {!isYoutube && !isIframe && !isSrcImage && (
           <>
             <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={togglePlay}>
               {playing ? <Pause className="h-2.5 w-2.5" /> : <Play className="h-2.5 w-2.5" />}
