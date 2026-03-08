@@ -3,9 +3,11 @@ import { useDataSources, useCreateDataSource, useUpdateDataSource, useDeleteData
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Radio, Camera, FileText, Waves, Rss, Plus, Trash2, Power, PowerOff,
-  RefreshCw, AlertTriangle, CheckCircle2, Loader2, Activity, Clock, Hash
+  RefreshCw, AlertTriangle, CheckCircle2, Loader2, Activity, Clock, Hash,
+  Satellite, Ship, Plane, Download,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -14,10 +16,27 @@ const SOURCE_TYPE_OPTIONS = [
   { value: "audio_feed", label: "Audio Feed", icon: Radio, description: "Radio comms, distress calls, VHF/UHF" },
   { value: "document", label: "Document", icon: FileText, description: "PDF reports, logs, manifests" },
   { value: "sensor_telemetry", label: "Sensor Telemetry", icon: Waves, description: "Buoy data, AIS, radar, sonar" },
-  { value: "rss_feed", label: "RSS Feed", icon: Rss, description: "Maritime alerts, weather, NAVTEX" },
+  { value: "rss_feed", label: "RSS Feed", icon: Rss, description: "Maritime alerts, weather, news" },
+  { value: "ais_tracker", label: "AIS Vessel Tracker", icon: Ship, description: "Live AIS vessel positions" },
+  { value: "opensky", label: "OpenSky Aircraft", icon: Plane, description: "Live aircraft tracking via OpenSky" },
 ] as const;
 
 const AUTH_OPTIONS = ["none", "api_key", "basic", "bearer", "certificate"] as const;
+
+const FREE_FEEDS = [
+  { key: "bbc_world", label: "BBC World News", category: "news" },
+  { key: "reuters", label: "Reuters Top News", category: "news" },
+  { key: "aljazeera", label: "Al Jazeera", category: "news" },
+  { key: "defense_one", label: "Defense One", category: "defense" },
+  { key: "breaking_defense", label: "Breaking Defense", category: "defense" },
+  { key: "defense_news", label: "Defense News", category: "defense" },
+  { key: "usni_news", label: "USNI News (Maritime)", category: "maritime" },
+  { key: "bellingcat", label: "Bellingcat (OSINT)", category: "osint" },
+  { key: "state_dept", label: "State Department", category: "government" },
+  { key: "csis", label: "CSIS Analysis", category: "think_tank" },
+  { key: "atlantic_council", label: "Atlantic Council", category: "think_tank" },
+  { key: "foreign_policy", label: "Foreign Policy", category: "geopolitics" },
+];
 
 function StatusIndicator({ status }: { status: string }) {
   const map: Record<string, { color: string; icon: typeof CheckCircle2 }> = {
@@ -107,6 +126,8 @@ export default function SourcesPage() {
   const [authType, setAuthType] = useState("none");
   const [maxRetries, setMaxRetries] = useState("5");
   const [retryDelay, setRetryDelay] = useState("30");
+  const [rssLoading, setRssLoading] = useState(false);
+  const [liveLoading, setLiveLoading] = useState<string | null>(null);
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,10 +157,42 @@ export default function SourcesPage() {
     });
   };
 
-  const handleDelete = (id: string) => {
+  const handleHardDelete = (id: string) => {
+    if (!confirm("Permanently delete this source and all associated data?")) return;
     deleteSource.mutate(id, {
-      onSuccess: () => toast.success("Source deleted"),
+      onSuccess: () => toast.success("Source permanently deleted"),
+      onError: (err) => toast.error("Delete failed: " + err.message),
     });
+  };
+
+  const handleRssIngest = async (feedKeys?: string[]) => {
+    setRssLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("rss-ingester", {
+        body: { action: "ingest", feeds: feedKeys },
+      });
+      if (error) throw error;
+      toast.success(`RSS ingestion complete: ${data?.total_ingested || 0} new articles`);
+    } catch (err: any) {
+      toast.error("RSS ingestion failed: " + err.message);
+    } finally {
+      setRssLoading(false);
+    }
+  };
+
+  const handleLiveIngest = async (source: "opensky" | "ais") => {
+    setLiveLoading(source);
+    try {
+      const { data, error } = await supabase.functions.invoke("live-data-ingester", {
+        body: { action: "ingest", source },
+      });
+      if (error) throw error;
+      toast.success(`${source.toUpperCase()}: ${data?.ingested || 0} records ingested`);
+    } catch (err: any) {
+      toast.error(`${source} ingestion failed: ` + err.message);
+    } finally {
+      setLiveLoading(null);
+    }
   };
 
   const activeCount = sources?.filter(s => s.status === "active").length || 0;
@@ -151,7 +204,7 @@ export default function SourcesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Data Sources</h2>
-          <p className="text-sm text-muted-foreground font-mono">Configure and monitor ingestion endpoints</p>
+          <p className="text-sm text-muted-foreground font-mono">Configure, monitor, and ingest from live data feeds</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
           <Plus className="mr-2 h-4 w-4" /> Add Source
@@ -171,6 +224,58 @@ export default function SourcesPage() {
             <p className="text-2xl font-bold text-foreground">{value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Live Data Ingestion */}
+      <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+        <h3 className="text-sm font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+          <Satellite className="h-4 w-4" /> Live Free Data Sources
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* RSS */}
+          <div className="rounded-md border border-border p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Rss className="h-4 w-4 text-primary" />
+              <span className="text-xs font-bold">RSS News Feeds</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">{FREE_FEEDS.length} curated defense, maritime, and geopolitical feeds</p>
+            <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+              {FREE_FEEDS.map((f) => (
+                <span key={f.key} className="text-[8px] font-mono bg-secondary px-1 py-0.5 rounded">{f.label}</span>
+              ))}
+            </div>
+            <Button size="sm" className="w-full" onClick={() => handleRssIngest()} disabled={rssLoading}>
+              {rssLoading ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Download className="mr-1 h-3 w-3" />}
+              {rssLoading ? "Ingesting..." : "Ingest All Feeds"}
+            </Button>
+          </div>
+
+          {/* OpenSky */}
+          <div className="rounded-md border border-border p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Plane className="h-4 w-4 text-accent" />
+              <span className="text-xs font-bold">OpenSky Aircraft</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Live aircraft positions worldwide via OpenSky Network (free, no auth)</p>
+            <Button size="sm" variant="outline" className="w-full" onClick={() => handleLiveIngest("opensky")} disabled={liveLoading === "opensky"}>
+              {liveLoading === "opensky" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Plane className="mr-1 h-3 w-3" />}
+              Fetch Aircraft Data
+            </Button>
+          </div>
+
+          {/* AIS */}
+          <div className="rounded-md border border-border p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Ship className="h-4 w-4 text-primary" />
+              <span className="text-xs font-bold">AIS Vessel Tracking</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Live vessel positions from Finland Digitraffic (free, public API)</p>
+            <Button size="sm" variant="outline" className="w-full" onClick={() => handleLiveIngest("ais")} disabled={liveLoading === "ais"}>
+              {liveLoading === "ais" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Ship className="mr-1 h-3 w-3" />}
+              Fetch Vessel Data
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Create Form */}
@@ -230,7 +335,7 @@ export default function SourcesPage() {
         <div className="rounded-lg border border-dashed border-border p-12 text-center">
           <Radio className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">No data sources configured yet</p>
-          <p className="text-xs text-muted-foreground mt-1">Add your first RTSP camera, sensor feed, or RSS source</p>
+          <p className="text-xs text-muted-foreground mt-1">Use the live data sources above or add a custom source</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -239,29 +344,11 @@ export default function SourcesPage() {
               key={source.id}
               source={source}
               onToggle={() => handleToggle(source)}
-              onDelete={() => handleDelete(source.id)}
+              onDelete={() => handleHardDelete(source.id)}
             />
           ))}
         </div>
       )}
-
-      {/* API Documentation */}
-      <div className="rounded-lg border border-border bg-card p-6">
-        <h3 className="mb-3 text-sm font-mono uppercase tracking-wider text-muted-foreground">API Endpoint</h3>
-        <p className="text-xs text-muted-foreground mb-3">External systems can push data via the HTTP receiver endpoint:</p>
-        <div className="rounded-md bg-secondary p-4 font-mono text-xs text-foreground space-y-2">
-          <p className="text-muted-foreground"># POST /functions/v1/ingest-receiver</p>
-          <p>{"{"}</p>
-          <p className="pl-4">"source_id": "uuid-of-configured-source",</p>
-          <p className="pl-4">"source_type": "sensor_telemetry",</p>
-          <p className="pl-4">"title": "Buoy Alpha Telemetry",</p>
-          <p className="pl-4">"content": {"{ \"temp\": 18.5, \"wave_height\": 2.1 }"},</p>
-          <p className="pl-4">"latitude": 33.75,</p>
-          <p className="pl-4">"longitude": -117.85,</p>
-          <p className="pl-4">"priority": "medium"</p>
-          <p>{"}"}</p>
-        </div>
-      </div>
     </div>
   );
 }

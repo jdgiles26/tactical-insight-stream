@@ -1,18 +1,21 @@
 import { useState } from "react";
 import { useSearchDataProducts } from "@/hooks/useDataProducts";
 import { DataProductTable } from "@/components/DataProductTable";
+import CorrelationPanel from "@/components/CorrelationPanel";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 
 export default function DiscoveryPage() {
   const [query, setQuery] = useState("");
   const { data = [], isLoading } = useSearchDataProducts(query);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedItem = data.find((d) => d.id === selectedId);
 
   return (
     <div className="space-y-6 animate-slide-in">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Data Discovery</h2>
-        <p className="text-sm text-muted-foreground font-mono">Search and discover tactical data products</p>
+        <p className="text-sm text-muted-foreground font-mono">Search and discover tactical data products • click a row to view correlations</p>
       </div>
 
       <div className="relative">
@@ -31,8 +34,16 @@ export default function DiscoveryPage() {
             {data.length} results {query && `for "${query}"`}
           </span>
         </div>
-        <DataProductTable data={data} isLoading={isLoading} />
+        <DataProductTable data={data} isLoading={isLoading} onRowClick={(id) => setSelectedId(id)} />
       </div>
+
+      {selectedId && (
+        <CorrelationPanel
+          productId={selectedId}
+          productTitle={selectedItem?.title}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
     </div>
   );
 }
