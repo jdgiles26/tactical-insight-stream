@@ -36,11 +36,14 @@ export default function MapPage() {
     const map = L.map(containerRef.current, { center, zoom: 9 });
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+      maxZoom: 18,
     }).addTo(map);
     markersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
+    // Force resize after render
+    setTimeout(() => map.invalidateSize(), 100);
     return () => { map.remove(); mapRef.current = null; };
-  }, []);
+  }, [isLoading]);
 
   // Update markers
   useEffect(() => {
@@ -82,14 +85,13 @@ export default function MapPage() {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border">
-        {isLoading ? (
-          <div className="flex h-[600px] items-center justify-center bg-card">
+      <div className="overflow-hidden rounded-lg border border-border relative">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-card">
             <span className="text-sm font-mono text-muted-foreground">Loading map data…</span>
           </div>
-        ) : (
-          <div ref={containerRef} className="h-[600px] w-full" style={{ background: "hsl(220, 20%, 7%)" }} />
         )}
+        <div ref={containerRef} className="h-[600px] w-full" style={{ background: "hsl(220, 20%, 7%)" }} />
       </div>
 
       {geoProducts.length === 0 && !isLoading && (
