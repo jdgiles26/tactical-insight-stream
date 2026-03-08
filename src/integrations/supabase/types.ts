@@ -213,6 +213,57 @@ export type Database = {
         }
         Relationships: []
       }
+      dead_letter_queue: {
+        Row: {
+          created_at: string
+          data_product_id: string | null
+          error_message: string | null
+          id: string
+          original_event_id: string | null
+          payload: Json
+          retry_count: number
+          stage: string
+          topic: string
+        }
+        Insert: {
+          created_at?: string
+          data_product_id?: string | null
+          error_message?: string | null
+          id?: string
+          original_event_id?: string | null
+          payload: Json
+          retry_count?: number
+          stage: string
+          topic: string
+        }
+        Update: {
+          created_at?: string
+          data_product_id?: string | null
+          error_message?: string | null
+          id?: string
+          original_event_id?: string | null
+          payload?: Json
+          retry_count?: number
+          stage?: string
+          topic?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dead_letter_queue_data_product_id_fkey"
+            columns: ["data_product_id"]
+            isOneToOne: false
+            referencedRelation: "data_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dead_letter_queue_original_event_id_fkey"
+            columns: ["original_event_id"]
+            isOneToOne: false
+            referencedRelation: "event_bus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       detection_results: {
         Row: {
           bounding_box: Json | null
@@ -247,6 +298,74 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "detection_results_data_product_id_fkey"
+            columns: ["data_product_id"]
+            isOneToOne: false
+            referencedRelation: "data_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_bus: {
+        Row: {
+          completed_at: string | null
+          consumer_group: string | null
+          created_at: string
+          data_product_id: string | null
+          error_message: string | null
+          id: string
+          max_retries: number
+          metadata: Json | null
+          next_retry_at: string | null
+          offset_id: number
+          partition_key: string | null
+          payload: Json
+          retry_count: number
+          stage: string
+          started_at: string | null
+          status: string
+          topic: string
+        }
+        Insert: {
+          completed_at?: string | null
+          consumer_group?: string | null
+          created_at?: string
+          data_product_id?: string | null
+          error_message?: string | null
+          id?: string
+          max_retries?: number
+          metadata?: Json | null
+          next_retry_at?: string | null
+          offset_id?: never
+          partition_key?: string | null
+          payload?: Json
+          retry_count?: number
+          stage?: string
+          started_at?: string | null
+          status?: string
+          topic: string
+        }
+        Update: {
+          completed_at?: string | null
+          consumer_group?: string | null
+          created_at?: string
+          data_product_id?: string | null
+          error_message?: string | null
+          id?: string
+          max_retries?: number
+          metadata?: Json | null
+          next_retry_at?: string | null
+          offset_id?: never
+          partition_key?: string | null
+          payload?: Json
+          retry_count?: number
+          stage?: string
+          started_at?: string | null
+          status?: string
+          topic?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_bus_data_product_id_fkey"
             columns: ["data_product_id"]
             isOneToOne: false
             referencedRelation: "data_products"
@@ -291,6 +410,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pipeline_stages: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+          is_active: boolean
+          name: string
+          stage_order: number
+          timeout_seconds: number
+          topic: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id?: string
+          is_active?: boolean
+          name: string
+          stage_order: number
+          timeout_seconds?: number
+          topic: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          stage_order?: number
+          timeout_seconds?: number
+          topic?: string
+        }
+        Relationships: []
       }
       processing_queue: {
         Row: {

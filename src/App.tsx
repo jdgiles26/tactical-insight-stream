@@ -14,6 +14,7 @@ import SourcesPage from "./pages/SourcesPage";
 import CommanderIntentPage from "./pages/CommanderIntentPage";
 import UploadPage from "./pages/UploadPage";
 import AlertsPage from "./pages/AlertsPage";
+import PipelinePage from "./pages/PipelinePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/sources" element={<SourcesPage />} />
               <Route path="/intent" element={<CommanderIntentPage />} />
               <Route path="/alerts" element={<AlertsPage />} />
+              <Route path="/pipeline" element={<PipelinePage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>
