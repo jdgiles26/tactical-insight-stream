@@ -66,8 +66,6 @@ function VideoCell({
           <Tv className="h-6 w-6 mx-auto mb-1 opacity-30" />
           <p className="text-[9px] font-mono">Slot {index + 1}</p>
         </div>
-        {/* Badge watermark on empty slots */}
-        <img src={saltwaterBadge} alt="Saltwater Recon" className="absolute bottom-1 right-1 h-6 w-6 opacity-20" />
       </div>
     );
   }
@@ -115,13 +113,7 @@ function VideoCell({
         />
       )}
 
-      {/* Badge frame overlay — bottom-right corner */}
-      <img
-        src={saltwaterBadge}
-        alt="Saltwater Recon"
-        className="absolute bottom-1 right-1 h-7 w-7 opacity-70 pointer-events-none z-10 drop-shadow-md"
-      />
-
+      {/* No badge overlay — kept clean */}
       {/* Top label overlay */}
       <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-1.5 py-0.5 bg-gradient-to-b from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-20">
         <span className="text-[9px] font-mono text-foreground truncate">{source.label}</span>
@@ -197,33 +189,42 @@ export default function MediaPlayerPage() {
 
   return (
     <div className="space-y-4 animate-slide-in">
-      {/* Header with badge */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <img src={saltwaterBadge} alt="Saltwater Recon" className="h-10 w-10 rounded-md shadow-md" />
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">Surveillance Grid</h2>
-            <p className="text-sm text-muted-foreground font-mono">
-              {sources.filter(Boolean).length} active feeds • {layoutConfig.value} layout • Caribbean & Americas
-            </p>
-          </div>
+      {/* Saltwater Recon Embed */}
+      <div className="flex items-center gap-4 rounded-lg border border-border bg-card p-4">
+        <a href="https://saltwaterrecon.com" target="_blank" rel="noopener noreferrer">
+          <img
+            src={saltwaterBadge}
+            alt="Saltwater Recon"
+            className="h-[120px] w-[120px] rounded-lg shadow-lg"
+          />
+        </a>
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Surveillance Grid</h2>
+          <p className="text-sm text-muted-foreground font-mono">
+            {sources.filter(Boolean).length} active feeds • {layoutConfig.value} layout • Caribbean & Americas
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Powered by <a href="https://saltwaterrecon.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold">Saltwater Recon</a>
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={layout} onValueChange={handleLayoutChange}>
-            <SelectTrigger className="w-24 h-8 text-xs">
-              <Grid3X3 className="h-3 w-3 mr-1" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LAYOUT_OPTIONS.map((l) => (
-                <SelectItem key={l.value} value={l.value}>{l.label} ({l.count} slots)</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button size="sm" variant="outline" onClick={() => setShowAddForm(!showAddForm)}>
-            <Plus className="h-3 w-3 mr-1" /> Add Stream
-          </Button>
-        </div>
+      </div>
+
+      {/* Layout controls */}
+      <div className="flex items-center gap-2 justify-end">
+        <Select value={layout} onValueChange={handleLayoutChange}>
+          <SelectTrigger className="w-24 h-8 text-xs">
+            <Grid3X3 className="h-3 w-3 mr-1" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {LAYOUT_OPTIONS.map((l) => (
+              <SelectItem key={l.value} value={l.value}>{l.label} ({l.count} slots)</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" onClick={() => setShowAddForm(!showAddForm)}>
+          <Plus className="h-3 w-3 mr-1" /> Add Stream
+        </Button>
       </div>
 
       {/* Add stream form */}
