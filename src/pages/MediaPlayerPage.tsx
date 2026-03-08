@@ -28,16 +28,16 @@ const LAYOUT_OPTIONS = [
 ] as const;
 
 const SAMPLE_SOURCES: StreamSource[] = [
-  // Live port & harbor webcam embeds
-  { id: "port-canaveral", label: "Port Canaveral, FL", src: "https://www.youtube.com/watch?v=P1ECqYkgSHo", type: "youtube" },
-  { id: "key-west", label: "Key West Harbor, FL", src: "https://www.youtube.com/watch?v=CK3mnWKsuXk", type: "youtube" },
-  { id: "miami-port", label: "Port of Miami, FL", src: "https://www.youtube.com/watch?v=zJXwEYsTcBk", type: "youtube" },
-  { id: "san-juan-pr", label: "San Juan, Puerto Rico", src: "https://www.youtube.com/watch?v=hI5GkJ7ZUUI", type: "youtube" },
-  { id: "galveston", label: "Galveston Ship Channel, TX", src: "https://www.youtube.com/watch?v=E09LU6SZljA", type: "youtube" },
-  { id: "corpus-christi", label: "Corpus Christi Port, TX", src: "https://www.youtube.com/watch?v=NW8eFnO1d5E", type: "youtube" },
-  { id: "st-thomas-usvi", label: "St Thomas, USVI", src: "https://www.youtube.com/watch?v=bNJm7MkIyKo", type: "youtube" },
-  { id: "panama-canal", label: "Panama Canal", src: "https://www.youtube.com/watch?v=myJBcMtqtiw", type: "youtube" },
-  { id: "demo-hls", label: "Demo HLS Stream", src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", type: "hls" },
+  // PTZtv verified live port cameras (YouTube live streams)
+  { id: "key-west", label: "Key West Harbor, FL", src: "https://www.youtube.com/watch?v=tfjpBt15bbc", type: "youtube" },
+  { id: "port-miami", label: "Port Miami, FL", src: "https://www.youtube.com/watch?v=DxZziUUr6CY", type: "youtube" },
+  { id: "port-everglades", label: "Port Everglades, FL", src: "https://www.youtube.com/watch?v=jVr7_V4Tohw", type: "youtube" },
+  { id: "port-miami-classic", label: "Port Miami Classic View", src: "https://www.youtube.com/watch?v=xdNX-cJKL3E", type: "youtube" },
+  // Saltwater Recon embed
+  { id: "saltwater-recon", label: "Saltwater Recon", src: "https://saltwater-recon.nyc3.cdn.digitaloceanspaces.com/square/EMB_LGDX00000B33.png", type: "iframe" },
+  // Working demo streams
+  { id: "demo-hls-1", label: "Demo HLS Stream", src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", type: "hls" },
+  { id: "demo-mp4", label: "Sample MP4", src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", type: "mp4" },
 ];
 
 // --- Video Cell Component ---
