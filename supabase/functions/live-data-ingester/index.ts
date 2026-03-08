@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
     }
 
     if (source === "opensky") {
-      const resolvedBounds = bounds || (region && OPENSKY_REGIONS[region]) || OPENSKY_REGIONS.europe_med;
+      const resolvedBounds = bounds || (region && OPENSKY_REGIONS[region]) || OPENSKY_REGIONS.caribbean_corridor;
       return await ingestOpenSky(supabase, sourceId, resolvedBounds);
     }
 

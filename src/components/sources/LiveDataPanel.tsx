@@ -39,7 +39,7 @@ const OPENSKY_REGIONS = [
 export default function LiveDataPanel() {
   const [rssLoading, setRssLoading] = useState(false);
   const [liveLoading, setLiveLoading] = useState<string | null>(null);
-  const [selectedRegion, setSelectedRegion] = useState("europe_med");
+  const [selectedRegion, setSelectedRegion] = useState("caribbean_corridor");
 
   const handleRssIngest = async () => {
     setRssLoading(true);

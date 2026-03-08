@@ -1,21 +1,24 @@
 import { useState, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Grid3X3, Play, Pause, Maximize2, Volume2, VolumeX,
-  Plus, X, Settings, Tv,
+  Plus, X, Tv,
 } from "lucide-react";
+import saltwaterBadge from "@/assets/saltwater-recon-badge.png";
 
+// --- Types ---
 interface StreamSource {
   id: string;
   label: string;
   src: string;
-  type: "hls" | "dash" | "mp4" | "youtube" | "rtsp_proxy";
+  type: "hls" | "dash" | "mp4" | "youtube" | "rtsp_proxy" | "iframe";
 }
 
+// --- Constants ---
 const LAYOUT_OPTIONS = [
   { value: "1x1", label: "1×1", cols: 1, rows: 1, count: 1 },
   { value: "2x2", label: "2×2", cols: 2, rows: 2, count: 4 },
@@ -25,11 +28,19 @@ const LAYOUT_OPTIONS = [
 ] as const;
 
 const SAMPLE_SOURCES: StreamSource[] = [
-  { id: "demo-1", label: "Port Camera Alpha", src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", type: "hls" },
-  { id: "demo-2", label: "Harbor Entrance", src: "https://cdn.jwplayer.com/manifests/pZxWPRg4.m3u8", type: "hls" },
-  { id: "demo-3", label: "Sample MP4", src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", type: "mp4" },
+  // Live port & harbor webcam embeds
+  { id: "port-canaveral", label: "Port Canaveral, FL", src: "https://www.youtube.com/watch?v=P1ECqYkgSHo", type: "youtube" },
+  { id: "key-west", label: "Key West Harbor, FL", src: "https://www.youtube.com/watch?v=CK3mnWKsuXk", type: "youtube" },
+  { id: "miami-port", label: "Port of Miami, FL", src: "https://www.youtube.com/watch?v=zJXwEYsTcBk", type: "youtube" },
+  { id: "san-juan-pr", label: "San Juan, Puerto Rico", src: "https://www.youtube.com/watch?v=hI5GkJ7ZUUI", type: "youtube" },
+  { id: "galveston", label: "Galveston Ship Channel, TX", src: "https://www.youtube.com/watch?v=E09LU6SZljA", type: "youtube" },
+  { id: "corpus-christi", label: "Corpus Christi Port, TX", src: "https://www.youtube.com/watch?v=NW8eFnO1d5E", type: "youtube" },
+  { id: "st-thomas-usvi", label: "St Thomas, USVI", src: "https://www.youtube.com/watch?v=bNJm7MkIyKo", type: "youtube" },
+  { id: "panama-canal", label: "Panama Canal", src: "https://www.youtube.com/watch?v=myJBcMtqtiw", type: "youtube" },
+  { id: "demo-hls", label: "Demo HLS Stream", src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", type: "hls" },
 ];
 
+// --- Video Cell Component ---
 function VideoCell({
   source,
   index,
@@ -50,11 +61,13 @@ function VideoCell({
 
   if (!source) {
     return (
-      <div className="flex items-center justify-center border border-dashed border-border rounded-md bg-secondary/30 aspect-video">
+      <div className="relative flex items-center justify-center border border-dashed border-border rounded-md bg-secondary/30 aspect-video overflow-hidden">
         <div className="text-center text-muted-foreground">
           <Tv className="h-6 w-6 mx-auto mb-1 opacity-30" />
           <p className="text-[9px] font-mono">Slot {index + 1}</p>
         </div>
+        {/* Badge watermark on empty slots */}
+        <img src={saltwaterBadge} alt="Saltwater Recon" className="absolute bottom-1 right-1 h-6 w-6 opacity-20" />
       </div>
     );
   }
@@ -77,17 +90,17 @@ function VideoCell({
     if (video) video.requestFullscreen?.();
   };
 
-  // For HLS, we need to use hls.js or the native video element
-  // For simplicity, use native <video> which supports HLS on Safari and mp4 everywhere
-  const videoSrc = source.type === "youtube"
-    ? undefined // YouTube needs iframe
-    : source.src;
+  const isEmbed = source.type === "youtube" || source.type === "iframe";
 
   return (
     <div className="relative group border border-border rounded-md overflow-hidden bg-background aspect-video">
-      {source.type === "youtube" ? (
+      {isEmbed ? (
         <iframe
-          src={source.src.replace("watch?v=", "embed/") + "?autoplay=1&mute=1"}
+          src={
+            source.type === "youtube"
+              ? source.src.replace("watch?v=", "embed/") + "?autoplay=1&mute=1"
+              : source.src
+          }
           className="w-full h-full"
           allow="autoplay; encrypted-media"
           allowFullScreen
@@ -96,24 +109,28 @@ function VideoCell({
         <video
           id={`video-${source.id}`}
           ref={videoRef}
-          src={videoSrc}
+          src={source.src}
           className="w-full h-full object-cover"
-          autoPlay
-          muted
-          loop
-          playsInline
+          autoPlay muted loop playsInline
         />
       )}
 
-      {/* Overlay label */}
-      <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-1.5 py-0.5 bg-gradient-to-b from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Badge frame overlay — bottom-right corner */}
+      <img
+        src={saltwaterBadge}
+        alt="Saltwater Recon"
+        className="absolute bottom-1 right-1 h-7 w-7 opacity-70 pointer-events-none z-10 drop-shadow-md"
+      />
+
+      {/* Top label overlay */}
+      <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-1.5 py-0.5 bg-gradient-to-b from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-20">
         <span className="text-[9px] font-mono text-foreground truncate">{source.label}</span>
         <Badge variant="outline" className="text-[8px] px-1 h-3">{source.type.toUpperCase()}</Badge>
       </div>
 
       {/* Controls overlay */}
-      <div className="absolute bottom-0 left-0 right-0 flex items-center gap-0.5 p-1 bg-gradient-to-t from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-        {source.type !== "youtube" && (
+      <div className="absolute bottom-0 left-0 right-8 flex items-center gap-0.5 p-1 bg-gradient-to-t from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-20">
+        {!isEmbed && (
           <>
             <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={togglePlay}>
               {playing ? <Pause className="h-2.5 w-2.5" /> : <Play className="h-2.5 w-2.5" />}
@@ -135,6 +152,7 @@ function VideoCell({
   );
 }
 
+// --- Main Page ---
 export default function MediaPlayerPage() {
   const [layout, setLayout] = useState<string>("3x3");
   const [sources, setSources] = useState<(StreamSource | null)[]>(
@@ -143,7 +161,7 @@ export default function MediaPlayerPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newSrc, setNewSrc] = useState("");
-  const [newType, setNewType] = useState<StreamSource["type"]>("hls");
+  const [newType, setNewType] = useState<StreamSource["type"]>("youtube");
 
   const layoutConfig = LAYOUT_OPTIONS.find((l) => l.value === layout) || LAYOUT_OPTIONS[2];
 
@@ -179,12 +197,16 @@ export default function MediaPlayerPage() {
 
   return (
     <div className="space-y-4 animate-slide-in">
+      {/* Header with badge */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Media Player</h2>
-          <p className="text-sm text-muted-foreground font-mono">
-            {sources.filter(Boolean).length} active streams • {layoutConfig.value} layout
-          </p>
+        <div className="flex items-center gap-3">
+          <img src={saltwaterBadge} alt="Saltwater Recon" className="h-10 w-10 rounded-md shadow-md" />
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Surveillance Grid</h2>
+            <p className="text-sm text-muted-foreground font-mono">
+              {sources.filter(Boolean).length} active feeds • {layoutConfig.value} layout • Caribbean & Americas
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Select value={layout} onValueChange={handleLayoutChange}>
@@ -214,17 +236,18 @@ export default function MediaPlayerPage() {
             </div>
             <div className="flex-[2]">
               <label className="text-[10px] font-mono text-muted-foreground">URL</label>
-              <Input value={newSrc} onChange={(e) => setNewSrc(e.target.value)} placeholder="https://... or rtsp://..." className="h-7 text-xs bg-secondary" />
+              <Input value={newSrc} onChange={(e) => setNewSrc(e.target.value)} placeholder="https://youtube.com/watch?v=..." className="h-7 text-xs bg-secondary" />
             </div>
-            <div className="w-24">
+            <div className="w-28">
               <label className="text-[10px] font-mono text-muted-foreground">Type</label>
               <Select value={newType} onValueChange={(v) => setNewType(v as any)}>
                 <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="youtube">YouTube</SelectItem>
                   <SelectItem value="hls">HLS</SelectItem>
                   <SelectItem value="dash">DASH</SelectItem>
                   <SelectItem value="mp4">MP4</SelectItem>
-                  <SelectItem value="youtube">YouTube</SelectItem>
+                  <SelectItem value="iframe">iFrame</SelectItem>
                   <SelectItem value="rtsp_proxy">RTSP Proxy</SelectItem>
                 </SelectContent>
               </Select>
