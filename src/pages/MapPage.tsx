@@ -85,14 +85,13 @@ export default function MapPage() {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border">
-        {isLoading ? (
-          <div className="flex h-[600px] items-center justify-center bg-card">
+      <div className="overflow-hidden rounded-lg border border-border relative">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-card">
             <span className="text-sm font-mono text-muted-foreground">Loading map data…</span>
           </div>
-        ) : (
-          <div ref={containerRef} className="h-[600px] w-full" style={{ background: "hsl(220, 20%, 7%)" }} />
         )}
+        <div ref={containerRef} className="h-[600px] w-full" style={{ background: "hsl(220, 20%, 7%)" }} />
       </div>
 
       {geoProducts.length === 0 && !isLoading && (
