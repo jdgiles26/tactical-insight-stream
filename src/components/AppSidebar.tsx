@@ -7,6 +7,7 @@ import {
   BarChart3, 
   Radio, 
   Map,
+  Plug,
   Shield
 } from "lucide-react";
 
