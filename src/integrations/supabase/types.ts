@@ -14,7 +14,160 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      data_products: {
+        Row: {
+          confidence_score: number | null
+          content: Json | null
+          created_at: string
+          id: string
+          latitude: number | null
+          longitude: number | null
+          priority: Database["public"]["Enums"]["priority_level"] | null
+          priority_reasoning: string | null
+          priority_score: number | null
+          source_identifier: string | null
+          source_type: Database["public"]["Enums"]["source_type"]
+          status: Database["public"]["Enums"]["data_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          confidence_score?: number | null
+          content?: Json | null
+          created_at?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          priority?: Database["public"]["Enums"]["priority_level"] | null
+          priority_reasoning?: string | null
+          priority_score?: number | null
+          source_identifier?: string | null
+          source_type?: Database["public"]["Enums"]["source_type"]
+          status?: Database["public"]["Enums"]["data_status"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          confidence_score?: number | null
+          content?: Json | null
+          created_at?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          priority?: Database["public"]["Enums"]["priority_level"] | null
+          priority_reasoning?: string | null
+          priority_score?: number | null
+          source_identifier?: string | null
+          source_type?: Database["public"]["Enums"]["source_type"]
+          status?: Database["public"]["Enums"]["data_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      metadata_tags: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          data_product_id: string
+          id: string
+          tag_category: string | null
+          tag_name: string
+          tag_value: string
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          data_product_id: string
+          id?: string
+          tag_category?: string | null
+          tag_name: string
+          tag_value: string
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          data_product_id?: string
+          id?: string
+          tag_category?: string | null
+          tag_name?: string
+          tag_value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metadata_tags_data_product_id_fkey"
+            columns: ["data_product_id"]
+            isOneToOne: false
+            referencedRelation: "data_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processing_queue: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          data_product_id: string
+          error_message: string | null
+          id: string
+          started_at: string | null
+          status: string
+          step: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          data_product_id: string
+          error_message?: string | null
+          id?: string
+          started_at?: string | null
+          status?: string
+          step: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          data_product_id?: string
+          error_message?: string | null
+          id?: string
+          started_at?: string | null
+          status?: string
+          step?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processing_queue_data_product_id_fkey"
+            columns: ["data_product_id"]
+            isOneToOne: false
+            referencedRelation: "data_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_metrics: {
+        Row: {
+          id: string
+          metric_name: string
+          metric_value: number
+          recorded_at: string
+          unit: string | null
+        }
+        Insert: {
+          id?: string
+          metric_name: string
+          metric_value: number
+          recorded_at?: string
+          unit?: string | null
+        }
+        Update: {
+          id?: string
+          metric_name?: string
+          metric_value?: number
+          recorded_at?: string
+          unit?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +176,23 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      data_status:
+        | "ingested"
+        | "processing"
+        | "tagged"
+        | "prioritized"
+        | "transported"
+        | "archived"
+      priority_level: "critical" | "high" | "medium" | "low" | "routine"
+      source_type:
+        | "sensor"
+        | "cot_message"
+        | "image"
+        | "video"
+        | "document"
+        | "sigint"
+        | "humint"
+        | "geoint"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +319,26 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      data_status: [
+        "ingested",
+        "processing",
+        "tagged",
+        "prioritized",
+        "transported",
+        "archived",
+      ],
+      priority_level: ["critical", "high", "medium", "low", "routine"],
+      source_type: [
+        "sensor",
+        "cot_message",
+        "image",
+        "video",
+        "document",
+        "sigint",
+        "humint",
+        "geoint",
+      ],
+    },
   },
 } as const
