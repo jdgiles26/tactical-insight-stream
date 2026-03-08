@@ -65,6 +65,63 @@ export type Database = {
         }
         Relationships: []
       }
+      data_sources: {
+        Row: {
+          auth_credentials: Json | null
+          auth_type: string | null
+          config: Json | null
+          created_at: string
+          endpoint_url: string | null
+          id: string
+          last_error: string | null
+          last_heartbeat: string | null
+          max_retries: number
+          name: string
+          retry_count: number
+          retry_delay_seconds: number
+          source_type: string
+          status: string
+          total_ingested: number
+          updated_at: string
+        }
+        Insert: {
+          auth_credentials?: Json | null
+          auth_type?: string | null
+          config?: Json | null
+          created_at?: string
+          endpoint_url?: string | null
+          id?: string
+          last_error?: string | null
+          last_heartbeat?: string | null
+          max_retries?: number
+          name: string
+          retry_count?: number
+          retry_delay_seconds?: number
+          source_type: string
+          status?: string
+          total_ingested?: number
+          updated_at?: string
+        }
+        Update: {
+          auth_credentials?: Json | null
+          auth_type?: string | null
+          config?: Json | null
+          created_at?: string
+          endpoint_url?: string | null
+          id?: string
+          last_error?: string | null
+          last_heartbeat?: string | null
+          max_retries?: number
+          name?: string
+          retry_count?: number
+          retry_delay_seconds?: number
+          source_type?: string
+          status?: string
+          total_ingested?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       metadata_tags: {
         Row: {
           confidence: number | null
