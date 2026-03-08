@@ -11,7 +11,8 @@ import {
   Shield,
   Upload,
   Crosshair,
-  AlertTriangle
+  AlertTriangle,
+  GitBranch,
 } from "lucide-react";
 
 const navItems = [
