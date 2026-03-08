@@ -13,7 +13,7 @@ interface DataProduct {
   created_at: string;
 }
 
-export function DataProductTable({ data, isLoading }: { data: DataProduct[]; isLoading: boolean }) {
+export function DataProductTable({ data, isLoading, onRowClick }: { data: DataProduct[]; isLoading: boolean; onRowClick?: (id: string) => void }) {
   if (isLoading) {
     return (
       <div className="space-y-2">
