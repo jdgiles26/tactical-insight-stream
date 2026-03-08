@@ -208,22 +208,23 @@ export default function MediaPlayerPage() {
           </p>
         </div>
       </div>
-        <div className="flex items-center gap-2">
-          <Select value={layout} onValueChange={handleLayoutChange}>
-            <SelectTrigger className="w-24 h-8 text-xs">
-              <Grid3X3 className="h-3 w-3 mr-1" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LAYOUT_OPTIONS.map((l) => (
-                <SelectItem key={l.value} value={l.value}>{l.label} ({l.count} slots)</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button size="sm" variant="outline" onClick={() => setShowAddForm(!showAddForm)}>
-            <Plus className="h-3 w-3 mr-1" /> Add Stream
-          </Button>
-        </div>
+
+      {/* Layout controls */}
+      <div className="flex items-center gap-2 justify-end">
+        <Select value={layout} onValueChange={handleLayoutChange}>
+          <SelectTrigger className="w-24 h-8 text-xs">
+            <Grid3X3 className="h-3 w-3 mr-1" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {LAYOUT_OPTIONS.map((l) => (
+              <SelectItem key={l.value} value={l.value}>{l.label} ({l.count} slots)</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" onClick={() => setShowAddForm(!showAddForm)}>
+          <Plus className="h-3 w-3 mr-1" /> Add Stream
+        </Button>
       </div>
 
       {/* Add stream form */}
