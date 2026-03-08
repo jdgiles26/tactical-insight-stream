@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Database, Send, Loader2 } from "lucide-react";
+import ActivityFeed from "@/components/ActivityFeed";
 
 const SOURCE_TYPES = ["sensor", "cot_message", "image", "video", "document", "sigint", "humint", "geoint"] as const;
 const PRIORITIES = ["critical", "high", "medium", "low", "routine"] as const;
