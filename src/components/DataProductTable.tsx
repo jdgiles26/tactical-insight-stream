@@ -1,5 +1,7 @@
+import { useCallback, useRef, useEffect } from "react";
 import { StatusBadge } from "./StatusBadge";
 import { formatDistanceToNow } from "date-fns";
+import { useSeenItems, useVisibilityTracker } from "@/hooks/useSeenItems";
 
 interface DataProduct {
   id: string;
@@ -13,7 +15,20 @@ interface DataProduct {
   created_at: string;
 }
 
-export function DataProductTable({ data, isLoading, onRowClick }: { data: DataProduct[]; isLoading: boolean; onRowClick?: (id: string) => void }) {
+export function DataProductTable({
+  data,
+  isLoading,
+  onRowClick,
+}: {
+  data: DataProduct[];
+  isLoading: boolean;
+  onRowClick?: (id: string) => void;
+}) {
+  const { isNew, markSeen } = useSeenItems();
+  const { observe } = useVisibilityTracker(
+    useCallback((id: string) => markSeen(id), [markSeen])
+  );
+
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -38,6 +53,7 @@ export function DataProductTable({ data, isLoading, onRowClick }: { data: DataPr
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left">
+            <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-muted-foreground w-4"></th>
             <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-muted-foreground">Title</th>
             <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-muted-foreground">Source</th>
             <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-muted-foreground">Status</th>
@@ -47,28 +63,51 @@ export function DataProductTable({ data, isLoading, onRowClick }: { data: DataPr
           </tr>
         </thead>
         <tbody>
-          {data.map((item) => (
-            <tr key={item.id} className="border-b border-border/50 transition-colors hover:bg-secondary/50 cursor-pointer" onClick={() => onRowClick?.(item.id)}>
-              <td className="px-4 py-3 font-medium text-foreground">{item.title}</td>
-              <td className="px-4 py-3">
-                <span className="font-mono text-xs text-muted-foreground">{item.source_type}</span>
-              </td>
-              <td className="px-4 py-3">
-                <StatusBadge status={item.status as any} />
-              </td>
-              <td className="px-4 py-3">
-                {item.priority && <StatusBadge status={item.priority as any} />}
-              </td>
-              <td className="px-4 py-3">
-                <span className="font-mono text-xs text-foreground">
-                  {item.priority_score != null ? `${(Number(item.priority_score) * 100).toFixed(0)}%` : "—"}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-xs text-muted-foreground">
-                {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
-              </td>
-            </tr>
-          ))}
+          {data.map((item) => {
+            const unseen = isNew(item.id);
+            return (
+              <tr
+                key={item.id}
+                data-item-id={item.id}
+                ref={unseen ? (el) => { if (el) observe(el); } : undefined}
+                className={`border-b border-border/50 transition-all duration-500 cursor-pointer hover:bg-secondary/50 ${
+                  unseen ? "bg-primary/8" : ""
+                }`}
+                onClick={() => {
+                  markSeen(item.id);
+                  onRowClick?.(item.id);
+                }}
+              >
+                <td className="px-2 py-3">
+                  {unseen && (
+                    <span className="inline-flex h-2 w-2 rounded-full bg-primary animate-pulse" />
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={unseen ? "font-bold text-foreground" : "font-medium text-foreground"}>
+                    {item.title}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className="font-mono text-xs text-muted-foreground">{item.source_type}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <StatusBadge status={item.status as any} />
+                </td>
+                <td className="px-4 py-3">
+                  {item.priority && <StatusBadge status={item.priority as any} />}
+                </td>
+                <td className="px-4 py-3">
+                  <span className="font-mono text-xs text-foreground">
+                    {item.priority_score != null ? `${(Number(item.priority_score) * 100).toFixed(0)}%` : "—"}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-xs text-muted-foreground">
+                  {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
