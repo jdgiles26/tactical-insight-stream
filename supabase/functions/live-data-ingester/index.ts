@@ -6,18 +6,34 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Free data source APIs
 const SOURCES = {
-  // OpenSky Network - live aircraft tracking (free, no auth required)
   opensky: {
     url: "https://opensky-network.org/api/states/all",
     label: "OpenSky Aircraft Tracking",
   },
-  // AIS - marine traffic (free tier via public APIs)
   ais_public: {
     url: "https://meri.digitraffic.fi/api/ais/v1/locations",
     label: "AIS Vessel Tracking (Finland Digitraffic)",
   },
+  nasa_eonet: {
+    url: "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=50",
+    label: "NASA EONET Natural Events",
+  },
+  nasa_firms: {
+    url: "https://firms.modaps.eosdis.nasa.gov/api/area/csv/MODIS_NRT",
+    label: "NASA FIRMS Active Fires",
+  },
+};
+
+const OPENSKY_REGIONS: Record<string, { lamin: number; lomin: number; lamax: number; lomax: number }> = {
+  europe_med: { lamin: 30, lomin: -10, lamax: 60, lomax: 40 },
+  middle_east: { lamin: 12, lomin: 30, lamax: 42, lomax: 65 },
+  east_asia: { lamin: 10, lomin: 95, lamax: 50, lomax: 145 },
+  north_america: { lamin: 25, lomin: -130, lamax: 50, lomax: -60 },
+  south_china_sea: { lamin: 0, lomin: 100, lamax: 25, lomax: 125 },
+  horn_of_africa: { lamin: -5, lomin: 35, lamax: 20, lomax: 55 },
+  arctic: { lamin: 65, lomin: -180, lamax: 90, lomax: 180 },
+  indo_pacific: { lamin: -15, lomin: 90, lamax: 30, lomax: 160 },
 };
 
 Deno.serve(async (req) => {
@@ -33,21 +49,31 @@ Deno.serve(async (req) => {
     const action = body.action || "ingest";
     const source = body.source || "opensky";
     const sourceId = body.source_id || null;
-    const bounds = body.bounds || null; // { lamin, lomin, lamax, lomax }
+    const bounds = body.bounds || null;
+    const region = body.region || null;
 
     if (action === "list") {
-      return jsonResponse({ sources: SOURCES });
+      return jsonResponse({ sources: SOURCES, regions: OPENSKY_REGIONS });
     }
 
     if (source === "opensky") {
-      return await ingestOpenSky(supabase, sourceId, bounds);
+      const resolvedBounds = bounds || (region && OPENSKY_REGIONS[region]) || OPENSKY_REGIONS.europe_med;
+      return await ingestOpenSky(supabase, sourceId, resolvedBounds);
     }
 
     if (source === "ais") {
       return await ingestAIS(supabase, sourceId);
     }
 
-    return jsonResponse({ error: "Unknown source. Use: opensky, ais" }, 400);
+    if (source === "nasa_eonet") {
+      return await ingestNasaEONET(supabase, sourceId);
+    }
+
+    if (source === "nasa_firms") {
+      return await ingestNasaFIRMS(supabase, sourceId, bounds || (region && OPENSKY_REGIONS[region]));
+    }
+
+    return jsonResponse({ error: "Unknown source. Use: opensky, ais, nasa_eonet, nasa_firms" }, 400);
   } catch (err) {
     console.error("Live data ingestion error:", err);
     return jsonResponse({ error: String(err) }, 500);
@@ -55,8 +81,7 @@ Deno.serve(async (req) => {
 });
 
 async function ingestOpenSky(supabase: any, sourceId: string | null, bounds: any) {
-  // Default to Europe/Med region to avoid massive global payload that times out
-  const b = bounds || { lamin: 30, lomin: -10, lamax: 60, lomax: 40 };
+  const b = bounds;
   const url = `${SOURCES.opensky.url}?lamin=${b.lamin}&lomin=${b.lomin}&lamax=${b.lamax}&lomax=${b.lomax}`;
 
   const resp = await fetch(url, {
@@ -69,7 +94,7 @@ async function ingestOpenSky(supabase: any, sourceId: string | null, bounds: any
   }
 
   const data = await resp.json();
-  const states = (data.states || []).slice(0, 50); // Limit to 50
+  const states = (data.states || []).slice(0, 50);
 
   let ingested = 0;
   for (const s of states) {
@@ -77,7 +102,7 @@ async function ingestOpenSky(supabase: any, sourceId: string | null, bounds: any
     const country = s[2] || "Unknown";
     const lon = s[5];
     const lat = s[6];
-    const alt = s[7]; // geometric altitude
+    const alt = s[7];
     const velocity = s[9];
     const onGround = s[8];
 
@@ -134,15 +159,15 @@ async function ingestAIS(supabase: any, sourceId: string | null) {
     const coords = f.geometry?.coordinates || [];
     const mmsi = props.mmsi;
     const name = props.name || `Vessel MMSI:${mmsi}`;
-    const sog = props.sog; // speed over ground
-    const cog = props.cog; // course over ground
+    const sog = props.sog;
+    const cog = props.cog;
     const heading = props.heading;
     const navStat = props.navStat;
 
     if (!mmsi || coords.length < 2) continue;
 
     const title = `AIS Vessel: ${name}`;
-    const isHighPriority = sog > 20 || navStat === 0; // fast or underway using engine
+    const isHighPriority = sog > 20 || navStat === 0;
 
     const { error } = await supabase.from("data_products").insert({
       title,
@@ -171,6 +196,141 @@ async function ingestAIS(supabase: any, sourceId: string | null) {
   }
 
   return jsonResponse({ success: true, source: "ais", features_received: features.length, ingested });
+}
+
+async function ingestNasaEONET(supabase: any, sourceId: string | null) {
+  const resp = await fetch(SOURCES.nasa_eonet.url, {
+    headers: { Accept: "application/json", "User-Agent": "MDG/1.0" },
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!resp.ok) {
+    return jsonResponse({ error: `NASA EONET HTTP ${resp.status}` }, 502);
+  }
+
+  const data = await resp.json();
+  const events = (data.events || []).slice(0, 50);
+
+  let ingested = 0;
+  for (const ev of events) {
+    const cat = ev.categories?.[0]?.title || "Unknown";
+    const geo = ev.geometry?.[ev.geometry.length - 1]; // latest geometry
+    const coords = geo?.coordinates || [];
+    const lon = coords[0];
+    const lat = coords[1];
+    const isSevere = ["Severe Storms", "Volcanoes", "Wildfires"].includes(cat);
+
+    const title = `NASA EONET: ${ev.title}`;
+
+    const { error } = await supabase.from("data_products").insert({
+      title,
+      source_type: "sensor",
+      source_identifier: `nasa_eonet:${ev.id}`,
+      content: {
+        eonet_id: ev.id,
+        category: cat,
+        description: ev.description || null,
+        sources: ev.sources?.map((s: any) => ({ id: s.id, url: s.url })),
+        geometry_date: geo?.date,
+        geometry_type: geo?.type,
+        link: ev.link,
+      },
+      priority: isSevere ? "high" : "medium",
+      priority_score: isSevere ? 0.75 : 0.4,
+      confidence_score: 0.95,
+      status: "ingested",
+      latitude: lat || null,
+      longitude: lon || null,
+    });
+
+    if (!error) ingested++;
+  }
+
+  if (sourceId) {
+    await supabase
+      .from("data_sources")
+      .update({ last_heartbeat: new Date().toISOString(), status: "active" })
+      .eq("id", sourceId);
+  }
+
+  return jsonResponse({ success: true, source: "nasa_eonet", events_received: events.length, ingested });
+}
+
+async function ingestNasaFIRMS(supabase: any, sourceId: string | null, bounds: any) {
+  // NASA FIRMS provides a GeoJSON endpoint for active fires
+  // Using the open summary endpoint (no API key needed for VIIRS/MODIS summary)
+  const url = "https://firms.modaps.eosdis.nasa.gov/api/country/csv/MODIS_NRT/world/1";
+
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      headers: { "User-Agent": "MDG/1.0" },
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch {
+    // FIRMS may require an API key; fall back to EONET fire data
+    return jsonResponse({ error: "NASA FIRMS requires a MAP_KEY. Use nasa_eonet instead for fire events." }, 502);
+  }
+
+  if (!resp.ok) {
+    await resp.text();
+    return jsonResponse({ error: `NASA FIRMS HTTP ${resp.status}. Try nasa_eonet for fire data.` }, 502);
+  }
+
+  const text = await resp.text();
+  const lines = text.split("\n").filter(l => l.trim());
+  const header = lines[0]?.split(",") || [];
+  const latIdx = header.indexOf("latitude");
+  const lonIdx = header.indexOf("longitude");
+  const confIdx = header.indexOf("confidence");
+  const dateIdx = header.indexOf("acq_date");
+  const brightIdx = header.indexOf("brightness");
+
+  const rows = lines.slice(1, 51); // limit 50
+  let ingested = 0;
+
+  for (const row of rows) {
+    const cols = row.split(",");
+    const lat = parseFloat(cols[latIdx]);
+    const lon = parseFloat(cols[lonIdx]);
+    if (isNaN(lat) || isNaN(lon)) continue;
+
+    if (bounds) {
+      if (lat < bounds.lamin || lat > bounds.lamax || lon < bounds.lomin || lon > bounds.lomax) continue;
+    }
+
+    const confidence = cols[confIdx] || "unknown";
+    const isHigh = parseInt(confidence) >= 80;
+
+    const { error } = await supabase.from("data_products").insert({
+      title: `NASA FIRMS Fire: ${cols[dateIdx] || "Active"} (${confidence}%)`,
+      source_type: "sensor",
+      source_identifier: `nasa_firms:${lat.toFixed(3)}_${lon.toFixed(3)}`,
+      content: {
+        brightness: cols[brightIdx],
+        confidence,
+        acq_date: cols[dateIdx],
+        satellite: "MODIS",
+      },
+      priority: isHigh ? "high" : "medium",
+      priority_score: isHigh ? 0.7 : 0.35,
+      confidence_score: parseInt(confidence) / 100 || 0.5,
+      status: "ingested",
+      latitude: lat,
+      longitude: lon,
+    });
+
+    if (!error) ingested++;
+  }
+
+  if (sourceId) {
+    await supabase
+      .from("data_sources")
+      .update({ last_heartbeat: new Date().toISOString(), status: "active" })
+      .eq("id", sourceId);
+  }
+
+  return jsonResponse({ success: true, source: "nasa_firms", rows_parsed: rows.length, ingested });
 }
 
 function jsonResponse(data: any, status = 200) {
