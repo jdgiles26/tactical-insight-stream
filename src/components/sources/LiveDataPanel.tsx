@@ -22,13 +22,17 @@ const FREE_FEEDS = [
 ];
 
 const OPENSKY_REGIONS = [
+  { key: "caribbean_corridor", label: "Caribbean Corridor" },
+  { key: "gulf_of_mexico", label: "Gulf of Mexico" },
+  { key: "south_america_north", label: "South America (North)" },
+  { key: "puerto_rico_usvi", label: "Puerto Rico & USVI" },
+  { key: "us_east_coast", label: "US East Coast" },
+  { key: "us_west_coast", label: "US West Coast" },
   { key: "europe_med", label: "Europe & Mediterranean" },
   { key: "middle_east", label: "Middle East" },
   { key: "east_asia", label: "East Asia" },
-  { key: "north_america", label: "North America" },
   { key: "south_china_sea", label: "South China Sea" },
   { key: "horn_of_africa", label: "Horn of Africa" },
-  { key: "arctic", label: "Arctic" },
   { key: "indo_pacific", label: "Indo-Pacific" },
 ];
 
