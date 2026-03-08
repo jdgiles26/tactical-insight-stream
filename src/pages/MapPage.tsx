@@ -36,9 +36,12 @@ export default function MapPage() {
     const map = L.map(containerRef.current, { center, zoom: 9 });
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+      maxZoom: 18,
     }).addTo(map);
     markersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
+    // Force resize after render
+    setTimeout(() => map.invalidateSize(), 100);
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
