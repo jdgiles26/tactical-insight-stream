@@ -1,1 +1,4 @@
 project_id = "rvqocmnfaowcfuvznfwn"
+
+[functions.ingest-receiver]
+verify_jwt = false
