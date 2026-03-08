@@ -21,6 +21,7 @@ const navItems = [
   { path: "/upload", label: "Upload & Process", icon: Upload },
   { path: "/intent", label: "Commander's Intent", icon: Crosshair },
   { path: "/alerts", label: "Alerts", icon: AlertTriangle },
+  { path: "/pipeline", label: "Event Pipeline", icon: GitBranch },
   { path: "/map", label: "Map View", icon: Map },
   { path: "/discovery", label: "Discovery", icon: Search },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },

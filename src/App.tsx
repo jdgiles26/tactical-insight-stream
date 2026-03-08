@@ -39,6 +39,7 @@ const App = () => (
               <Route path="/sources" element={<SourcesPage />} />
               <Route path="/intent" element={<CommanderIntentPage />} />
               <Route path="/alerts" element={<AlertsPage />} />
+              <Route path="/pipeline" element={<PipelinePage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>

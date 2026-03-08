@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.video-processor]
 verify_jwt = false
+
+[functions.pipeline-orchestrator]
+verify_jwt = false
