@@ -373,6 +373,51 @@ export type Database = {
           },
         ]
       }
+      manual_correlations: {
+        Row: {
+          confidence: number | null
+          correlation_type: string
+          created_at: string
+          id: string
+          justification: string | null
+          source_product_id: string
+          target_product_id: string
+        }
+        Insert: {
+          confidence?: number | null
+          correlation_type?: string
+          created_at?: string
+          id?: string
+          justification?: string | null
+          source_product_id: string
+          target_product_id: string
+        }
+        Update: {
+          confidence?: number | null
+          correlation_type?: string
+          created_at?: string
+          id?: string
+          justification?: string | null
+          source_product_id?: string
+          target_product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_correlations_source_product_id_fkey"
+            columns: ["source_product_id"]
+            isOneToOne: false
+            referencedRelation: "data_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_correlations_target_product_id_fkey"
+            columns: ["target_product_id"]
+            isOneToOne: false
+            referencedRelation: "data_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       metadata_tags: {
         Row: {
           confidence: number | null
