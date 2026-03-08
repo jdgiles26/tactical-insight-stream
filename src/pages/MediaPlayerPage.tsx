@@ -44,27 +44,32 @@ function getInitialLayout() {
 }
 
 function getInitialSources(slotCount: number) {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved) as (StreamSource | null)[];
-      if (Array.isArray(parsed)) {
-        const padded = Array(slotCount).fill(null);
-        parsed.forEach((s, i) => {
-          if (i < slotCount) padded[i] = s;
-        });
-        return padded;
-      }
-    } catch {
-      // fallback to defaults
-    }
-  }
-
-  const initial = Array(slotCount).fill(null);
+  const fallback = Array(slotCount).fill(null);
   DEFAULT_SOURCES.forEach((source, index) => {
-    if (index < slotCount) initial[index] = source;
+    if (index < slotCount) fallback[index] = source;
   });
-  return initial;
+
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (!saved) return fallback;
+
+  try {
+    const parsed = JSON.parse(saved) as (StreamSource | null)[];
+    if (!Array.isArray(parsed)) return fallback;
+
+    const cleaned = parsed.filter((s) => s !== null && s.type !== "iframe") as StreamSource[];
+    const hasPrimary = cleaned.some((s) => s.src === "https://relay.ozark-tech.com/live/43rdst.stream/playlist.m3u8");
+    const normalized = hasPrimary
+      ? cleaned
+      : [DEFAULT_SOURCES[0], ...cleaned].slice(0, slotCount);
+
+    const padded = Array(slotCount).fill(null);
+    normalized.forEach((s, i) => {
+      if (i < slotCount) padded[i] = s;
+    });
+    return padded;
+  } catch {
+    return fallback;
+  }
 }
 
 function VideoCell({ source, index, onRemove }: { source: StreamSource | null; index: number; onRemove: () => void }) {
