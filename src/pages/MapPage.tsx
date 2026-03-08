@@ -43,7 +43,7 @@ export default function MapPage() {
     // Force resize after render
     setTimeout(() => map.invalidateSize(), 100);
     return () => { map.remove(); mapRef.current = null; };
-  }, []);
+  }, [isLoading]);
 
   // Update markers
   useEffect(() => {
