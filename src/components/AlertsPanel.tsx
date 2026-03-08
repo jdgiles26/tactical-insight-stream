@@ -22,14 +22,10 @@ export default function AlertsPanel() {
     setLiveAlerts((prev) => [alert, ...prev]);
     refetch();
 
-    // Audio-visual notification
     const isCrossSource = alert.match_type === "cross_source";
     toast.error(
       `🚨 ${isCrossSource ? "CROSS-SOURCE CORRELATION" : "ALERT"}: "${alert.matched_term}" matched "${alert.matched_label}"`,
-      {
-        duration: isCrossSource ? 15000 : 8000,
-        important: true,
-      }
+      { duration: isCrossSource ? 15000 : 8000 }
     );
   }, [refetch]);
 
