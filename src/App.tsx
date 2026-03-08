@@ -11,6 +11,9 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import QueuePage from "./pages/QueuePage";
 import MapPage from "./pages/MapPage";
 import SourcesPage from "./pages/SourcesPage";
+import CommanderIntentPage from "./pages/CommanderIntentPage";
+import UploadPage from "./pages/UploadPage";
+import AlertsPage from "./pages/AlertsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,11 +30,14 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/ingest" element={<IngestPage />} />
+              <Route path="/upload" element={<UploadPage />} />
               <Route path="/map" element={<MapPage />} />
               <Route path="/discovery" element={<DiscoveryPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/queue" element={<QueuePage />} />
               <Route path="/sources" element={<SourcesPage />} />
+              <Route path="/intent" element={<CommanderIntentPage />} />
+              <Route path="/alerts" element={<AlertsPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>

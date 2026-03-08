@@ -14,6 +14,97 @@ export type Database = {
   }
   public: {
     Tables: {
+      commander_intents: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          term: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          term: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          term?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      correlation_alerts: {
+        Row: {
+          acknowledged: boolean
+          created_at: string
+          data_product_id: string
+          detection_id: string | null
+          id: string
+          intent_id: string
+          match_score: number | null
+          match_type: string
+          matched_label: string
+          matched_term: string
+        }
+        Insert: {
+          acknowledged?: boolean
+          created_at?: string
+          data_product_id: string
+          detection_id?: string | null
+          id?: string
+          intent_id: string
+          match_score?: number | null
+          match_type: string
+          matched_label: string
+          matched_term: string
+        }
+        Update: {
+          acknowledged?: boolean
+          created_at?: string
+          data_product_id?: string
+          detection_id?: string | null
+          id?: string
+          intent_id?: string
+          match_score?: number | null
+          match_type?: string
+          matched_label?: string
+          matched_term?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "correlation_alerts_data_product_id_fkey"
+            columns: ["data_product_id"]
+            isOneToOne: false
+            referencedRelation: "data_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "correlation_alerts_detection_id_fkey"
+            columns: ["detection_id"]
+            isOneToOne: false
+            referencedRelation: "detection_results"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "correlation_alerts_intent_id_fkey"
+            columns: ["intent_id"]
+            isOneToOne: false
+            referencedRelation: "commander_intents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       data_products: {
         Row: {
           confidence_score: number | null
@@ -121,6 +212,47 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      detection_results: {
+        Row: {
+          bounding_box: Json | null
+          confidence: number | null
+          created_at: string
+          data_product_id: string
+          detector_type: string
+          id: string
+          label: string
+          metadata: Json | null
+        }
+        Insert: {
+          bounding_box?: Json | null
+          confidence?: number | null
+          created_at?: string
+          data_product_id: string
+          detector_type: string
+          id?: string
+          label: string
+          metadata?: Json | null
+        }
+        Update: {
+          bounding_box?: Json | null
+          confidence?: number | null
+          created_at?: string
+          data_product_id?: string
+          detector_type?: string
+          id?: string
+          label?: string
+          metadata?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "detection_results_data_product_id_fkey"
+            columns: ["data_product_id"]
+            isOneToOne: false
+            referencedRelation: "data_products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       metadata_tags: {
         Row: {
