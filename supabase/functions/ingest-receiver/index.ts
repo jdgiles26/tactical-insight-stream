@@ -110,11 +110,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Queue for processing
+    // Queue for processing (legacy)
     await supabase.from("processing_queue").insert({
       data_product_id: product.id,
       step: "metadata_extraction",
       status: "pending",
+    });
+
+    // Publish to event bus pipeline
+    await supabase.from("event_bus").insert({
+      topic: "mdg.ingestion",
+      stage: "ingestion",
+      data_product_id: product.id,
+      payload: { source_type: payload.source_type, priority },
+      status: "pending",
+      partition_key: payload.source_type,
     });
 
     return new Response(
