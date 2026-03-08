@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useSearchDataProducts } from "@/hooks/useDataProducts";
 import { DataProductTable } from "@/components/DataProductTable";
 import CorrelationPanel from "@/components/CorrelationPanel";
@@ -6,10 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 
 export default function DiscoveryPage() {
-  const [query, setQuery] = useState("");
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q") || "");
   const { data = [], isLoading } = useSearchDataProducts(query);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedItem = data.find((d) => d.id === selectedId);
+
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q) setQuery(q);
+  }, [searchParams]);
 
   return (
     <div className="space-y-6 animate-slide-in">
