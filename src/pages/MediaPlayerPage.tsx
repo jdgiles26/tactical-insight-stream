@@ -66,8 +66,6 @@ function VideoCell({
           <Tv className="h-6 w-6 mx-auto mb-1 opacity-30" />
           <p className="text-[9px] font-mono">Slot {index + 1}</p>
         </div>
-        {/* Badge watermark on empty slots */}
-        <img src={saltwaterBadge} alt="Saltwater Recon" className="absolute bottom-1 right-1 h-6 w-6 opacity-20" />
       </div>
     );
   }
