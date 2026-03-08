@@ -1,8 +1,6 @@
-import { useMemo } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
+import { useMemo, useEffect, useRef } from "react";
+import L from "leaflet";
 import { useDataProducts } from "@/hooks/useDataProducts";
-import { StatusBadge } from "@/components/StatusBadge";
-import { formatDistanceToNow } from "date-fns";
 import { MapPin } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
@@ -16,6 +14,9 @@ const priorityColors: Record<string, string> = {
 
 export default function MapPage() {
   const { data: products = [], isLoading } = useDataProducts();
+  const mapRef = useRef<L.Map | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const markersRef = useRef<L.LayerGroup | null>(null);
 
   const geoProducts = useMemo(
     () => products.filter((p) => p.latitude != null && p.longitude != null),
@@ -27,6 +28,49 @@ export default function MapPage() {
     const avgLat = geoProducts.reduce((s, p) => s + p.latitude!, 0) / geoProducts.length;
     const avgLng = geoProducts.reduce((s, p) => s + p.longitude!, 0) / geoProducts.length;
     return [avgLat, avgLng];
+  }, [geoProducts]);
+
+  // Init map
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    const map = L.map(containerRef.current, { center, zoom: 9 });
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+    }).addTo(map);
+    markersRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    return () => { map.remove(); mapRef.current = null; };
+  }, []);
+
+  // Update markers
+  useEffect(() => {
+    if (!markersRef.current || !mapRef.current) return;
+    markersRef.current.clearLayers();
+
+    geoProducts.forEach((p) => {
+      const color = priorityColors[p.priority || "routine"];
+      const radius = p.priority === "critical" ? 10 : p.priority === "high" ? 8 : 6;
+      const marker = L.circleMarker([p.latitude!, p.longitude!], {
+        radius,
+        color,
+        fillColor: color,
+        fillOpacity: 0.6,
+        weight: 2,
+      });
+      marker.bindPopup(`
+        <div style="font-family:Inter,sans-serif;font-size:12px;color:#1a1a2e">
+          <strong>${p.title}</strong><br/>
+          ${p.source_type} • ${p.source_identifier || "unknown"}<br/>
+          Score: ${p.priority_score != null ? `${(Number(p.priority_score) * 100).toFixed(0)}%` : "—"}
+        </div>
+      `);
+      markersRef.current!.addLayer(marker);
+    });
+
+    if (geoProducts.length > 0) {
+      const bounds = L.latLngBounds(geoProducts.map((p) => [p.latitude!, p.longitude!]));
+      mapRef.current.fitBounds(bounds, { padding: [40, 40] });
+    }
   }, [geoProducts]);
 
   return (
@@ -44,39 +88,7 @@ export default function MapPage() {
             <span className="text-sm font-mono text-muted-foreground">Loading map data…</span>
           </div>
         ) : (
-          <MapContainer
-            center={center}
-            zoom={9}
-            className="h-[600px] w-full"
-            style={{ background: "hsl(220, 20%, 7%)" }}
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            />
-            {geoProducts.map((p) => (
-              <CircleMarker
-                key={p.id}
-                center={[p.latitude!, p.longitude!]}
-                radius={p.priority === "critical" ? 10 : p.priority === "high" ? 8 : 6}
-                pathOptions={{
-                  color: priorityColors[p.priority || "routine"],
-                  fillColor: priorityColors[p.priority || "routine"],
-                  fillOpacity: 0.6,
-                  weight: 2,
-                }}
-              >
-                <Popup>
-                  <div className="space-y-1 font-sans text-xs" style={{ color: "#1a1a2e" }}>
-                    <p className="font-bold text-sm">{p.title}</p>
-                    <p>{p.source_type} • {p.source_identifier || "unknown"}</p>
-                    <p>Score: {p.priority_score != null ? `${(Number(p.priority_score) * 100).toFixed(0)}%` : "—"}</p>
-                    <p>{formatDistanceToNow(new Date(p.created_at), { addSuffix: true })}</p>
-                  </div>
-                </Popup>
-              </CircleMarker>
-            ))}
-          </MapContainer>
+          <div ref={containerRef} className="h-[600px] w-full" style={{ background: "hsl(220, 20%, 7%)" }} />
         )}
       </div>
 
