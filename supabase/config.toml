@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.pipeline-orchestrator]
 verify_jwt = false
+
+[functions.rss-ingester]
+verify_jwt = false
+
+[functions.live-data-ingester]
+verify_jwt = false

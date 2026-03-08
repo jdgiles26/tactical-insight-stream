@@ -48,7 +48,7 @@ export function DataProductTable({ data, isLoading, onRowClick }: { data: DataPr
         </thead>
         <tbody>
           {data.map((item) => (
-            <tr key={item.id} className="border-b border-border/50 transition-colors hover:bg-secondary/50">
+            <tr key={item.id} className="border-b border-border/50 transition-colors hover:bg-secondary/50 cursor-pointer" onClick={() => onRowClick?.(item.id)}>
               <td className="px-4 py-3 font-medium text-foreground">{item.title}</td>
               <td className="px-4 py-3">
                 <span className="font-mono text-xs text-muted-foreground">{item.source_type}</span>
