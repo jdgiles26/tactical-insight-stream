@@ -160,7 +160,7 @@ export default function MediaPlayerPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newSrc, setNewSrc] = useState("");
-  const [newType, setNewType] = useState<StreamSource["type"]>("youtube");
+  const [newType, setNewType] = useState<StreamSource["type"]>("hls");
 
   const layoutConfig = LAYOUT_OPTIONS.find((l) => l.value === layout) || LAYOUT_OPTIONS[2];
 
