@@ -56,7 +56,7 @@ function getInitialSources(slotCount: number) {
     const parsed = JSON.parse(saved) as (StreamSource | null)[];
     if (!Array.isArray(parsed)) return fallback;
 
-    const cleaned = parsed.filter((s) => s !== null && s.type !== "iframe") as StreamSource[];
+    const cleaned = parsed.filter((s) => s !== null) as StreamSource[];
     const hasPrimary = cleaned.some((s) => s.src === "https://relay.ozark-tech.com/live/43rdst.stream/playlist.m3u8");
     const normalized = hasPrimary
       ? cleaned
