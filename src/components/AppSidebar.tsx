@@ -7,6 +7,7 @@ import {
   BarChart3, 
   Radio, 
   Map,
+  Plug,
   Shield
 } from "lucide-react";
 
@@ -17,6 +18,7 @@ const navItems = [
   { path: "/discovery", label: "Discovery", icon: Search },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/queue", label: "Processing Queue", icon: Radio },
+  { path: "/sources", label: "Data Sources", icon: Plug },
 ];
 
 export function AppSidebar() {
