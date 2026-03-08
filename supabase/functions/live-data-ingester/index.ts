@@ -55,14 +55,13 @@ Deno.serve(async (req) => {
 });
 
 async function ingestOpenSky(supabase: any, sourceId: string | null, bounds: any) {
-  let url = SOURCES.opensky.url;
-  if (bounds) {
-    url += `?lamin=${bounds.lamin}&lomin=${bounds.lomin}&lamax=${bounds.lamax}&lomax=${bounds.lomax}`;
-  }
+  // Default to Europe/Med region to avoid massive global payload that times out
+  const b = bounds || { lamin: 30, lomin: -10, lamax: 60, lomax: 40 };
+  const url = `${SOURCES.opensky.url}?lamin=${b.lamin}&lomin=${b.lomin}&lamax=${b.lamax}&lomax=${b.lomax}`;
 
   const resp = await fetch(url, {
     headers: { "User-Agent": "MDG/1.0" },
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(45000),
   });
 
   if (!resp.ok) {
