@@ -189,14 +189,25 @@ export default function MediaPlayerPage() {
 
   return (
     <div className="space-y-4 animate-slide-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Saltwater Recon Embed */}
+      <div className="flex items-center gap-4 rounded-lg border border-border bg-card p-4">
+        <a href="https://saltwaterrecon.com" target="_blank" rel="noopener noreferrer">
+          <img
+            src={saltwaterBadge}
+            alt="Saltwater Recon"
+            className="h-[120px] w-[120px] rounded-lg shadow-lg"
+          />
+        </a>
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Surveillance Grid</h2>
           <p className="text-sm text-muted-foreground font-mono">
             {sources.filter(Boolean).length} active feeds • {layoutConfig.value} layout • Caribbean & Americas
           </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Powered by <a href="https://saltwaterrecon.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold">Saltwater Recon</a>
+          </p>
         </div>
+      </div>
         <div className="flex items-center gap-2">
           <Select value={layout} onValueChange={handleLayoutChange}>
             <SelectTrigger className="w-24 h-8 text-xs">
