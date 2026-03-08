@@ -10,6 +10,7 @@ import DiscoveryPage from "./pages/DiscoveryPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import QueuePage from "./pages/QueuePage";
 import MapPage from "./pages/MapPage";
+import SourcesPage from "./pages/SourcesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
