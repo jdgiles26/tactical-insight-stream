@@ -4,6 +4,7 @@ import { useAllGeoProducts } from "@/hooks/useDataProducts";
 import { MapPin, Layers } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import StormThreatPanel from "@/components/StormThreatPanel";
+import StormHistoryTimeline from "@/components/StormHistoryTimeline";
 import "leaflet/dist/leaflet.css";
 
 const priorityColors: Record<string, string> = {
@@ -102,6 +103,9 @@ export default function MapPage() {
 
       {/* Storm Threat Assessment */}
       <StormThreatPanel />
+
+      {/* Storm History Timeline */}
+      <StormHistoryTimeline />
 
       {/* Map Tabs */}
       <Tabs defaultValue="ops" className="space-y-3">
