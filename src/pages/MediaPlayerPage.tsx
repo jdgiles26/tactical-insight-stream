@@ -146,11 +146,11 @@ function VideoCell({ source, index, onRemove }: { source: StreamSource | null; i
 
   return (
     <div className="relative group border border-border rounded-md overflow-hidden bg-background aspect-video">
-      {isYoutube ? (
+      {isEmbedded ? (
         <iframe
-          src={source.src.replace("watch?v=", "embed/") + "?autoplay=1&mute=1"}
+          src={source.type === "youtube" ? source.src.replace("watch?v=", "embed/") + "?autoplay=1&mute=1" : source.src}
           className="w-full h-full"
-          allow="autoplay; encrypted-media"
+          allow="autoplay; encrypted-media; fullscreen"
           allowFullScreen
         />
       ) : (
