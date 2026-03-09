@@ -131,7 +131,6 @@ export default function StormThreatPanel() {
       toast.error(`⚠️ STORM THREAT ESCALATED: ${prev} → ${curr}`, {
         description: assessment.details.join(" • "),
         duration: 15000,
-        important: true,
       });
     } else if (prev && LEVEL_ORDER.indexOf(curr) < LEVEL_ORDER.indexOf(prev)) {
       toast.success(`✅ Storm threat de-escalated: ${prev} → ${curr}`, {
