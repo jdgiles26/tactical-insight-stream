@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useRef } from "react";
 import L from "leaflet";
-import { useDataProducts } from "@/hooks/useDataProducts";
+import { useAllGeoProducts } from "@/hooks/useDataProducts";
 import { MapPin } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
