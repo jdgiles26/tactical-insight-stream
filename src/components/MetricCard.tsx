@@ -8,6 +8,7 @@ interface MetricCardProps {
   icon: LucideIcon;
   trend?: "up" | "down" | "neutral";
   variant?: "default" | "primary" | "warning" | "critical";
+  onClick?: () => void;
 }
 
 const variantStyles = {
