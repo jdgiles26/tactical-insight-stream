@@ -142,7 +142,7 @@ function VideoCell({ source, index, onRemove }: { source: StreamSource | null; i
     videoRef.current?.requestFullscreen?.();
   };
 
-  const isYoutube = source.type === "youtube";
+  const isEmbedded = source.type === "youtube" || source.type === "iframe";
 
   return (
     <div className="relative group border border-border rounded-md overflow-hidden bg-background aspect-video">
