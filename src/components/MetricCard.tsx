@@ -8,6 +8,7 @@ interface MetricCardProps {
   icon: LucideIcon;
   trend?: "up" | "down" | "neutral";
   variant?: "default" | "primary" | "warning" | "critical";
+  onClick?: () => void;
 }
 
 const variantStyles = {
@@ -24,12 +25,16 @@ const iconVariants = {
   critical: "text-critical",
 };
 
-export function MetricCard({ title, value, subtitle, icon: Icon, variant = "default" }: MetricCardProps) {
+export function MetricCard({ title, value, subtitle, icon: Icon, variant = "default", onClick }: MetricCardProps) {
   return (
-    <div className={cn(
-      "rounded-lg border bg-card p-5 transition-all hover:bg-card/80",
-      variantStyles[variant]
-    )}>
+    <div
+      className={cn(
+        "rounded-lg border bg-card p-5 transition-all hover:bg-card/80",
+        variantStyles[variant],
+        onClick && "cursor-pointer"
+      )}
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">{title}</p>

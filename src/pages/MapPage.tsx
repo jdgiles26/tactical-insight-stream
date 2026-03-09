@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useRef } from "react";
 import L from "leaflet";
-import { useDataProducts } from "@/hooks/useDataProducts";
+import { useAllGeoProducts } from "@/hooks/useDataProducts";
 import { MapPin } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
@@ -13,7 +13,7 @@ const priorityColors: Record<string, string> = {
 };
 
 export default function MapPage() {
-  const { data: products = [], isLoading } = useDataProducts();
+  const { data: products = [], isLoading } = useAllGeoProducts();
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
