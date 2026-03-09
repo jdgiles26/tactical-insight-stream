@@ -1,7 +1,9 @@
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { useAllGeoProducts } from "@/hooks/useDataProducts";
-import { MapPin } from "lucide-react";
+import { MapPin, Layers } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import StormThreatPanel from "@/components/StormThreatPanel";
 import "leaflet/dist/leaflet.css";
 
 const priorityColors: Record<string, string> = {
@@ -40,7 +42,6 @@ export default function MapPage() {
     }).addTo(map);
     markersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
-    // Force resize after render
     setTimeout(() => map.invalidateSize(), 100);
     return () => { map.remove(); mapRef.current = null; };
   }, [isLoading]);
@@ -99,22 +100,54 @@ export default function MapPage() {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border relative">
-        {isLoading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-card">
-            <span className="text-sm font-mono text-muted-foreground">Loading map data…</span>
-          </div>
-        )}
-        <div ref={containerRef} className="h-[600px] w-full" style={{ background: "hsl(220, 20%, 7%)" }} />
-      </div>
+      {/* Storm Threat Assessment */}
+      <StormThreatPanel />
 
-      {geoProducts.length === 0 && !isLoading && (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-card py-12 text-muted-foreground">
-          <MapPin className="mb-2 h-8 w-8" />
-          <p className="text-sm">No geolocated data products</p>
-          <p className="text-xs">Ingest products with lat/lng to see them on the map</p>
-        </div>
-      )}
+      {/* Map Tabs */}
+      <Tabs defaultValue="ops" className="space-y-3">
+        <TabsList className="bg-secondary">
+          <TabsTrigger value="ops" className="gap-1.5">
+            <Layers className="h-3.5 w-3.5" /> Ops Map
+          </TabsTrigger>
+          <TabsTrigger value="gpsjam" className="gap-1.5">
+            <MapPin className="h-3.5 w-3.5" /> GPS Jamming
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ops">
+          <div className="overflow-hidden rounded-lg border border-border relative">
+            {isLoading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-card">
+                <span className="text-sm font-mono text-muted-foreground">Loading map data…</span>
+              </div>
+            )}
+            <div ref={containerRef} className="h-[600px] w-full" style={{ background: "hsl(220, 20%, 7%)" }} />
+          </div>
+
+          {geoProducts.length === 0 && !isLoading && (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-card py-12 text-muted-foreground mt-3">
+              <MapPin className="mb-2 h-8 w-8" />
+              <p className="text-sm">No geolocated data products</p>
+              <p className="text-xs">Ingest products with lat/lng to see them on the map</p>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="gpsjam">
+          <div className="overflow-hidden rounded-lg border border-border">
+            <iframe
+              src="https://gpsjam.org/?lat=29.0&lon=-89.5&z=6"
+              className="h-[600px] w-full border-0"
+              title="GPS Jamming Map"
+              allow="geolocation"
+              loading="lazy"
+            />
+          </div>
+          <p className="text-[10px] text-muted-foreground font-mono mt-2">
+            Source: gpsjam.org — Global GPS/GNSS interference monitoring. Data refreshes automatically.
+          </p>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
