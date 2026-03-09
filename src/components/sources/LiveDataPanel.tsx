@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  Rss, Plane, Ship, Satellite, Download, Loader2, Flame, Globe2,
+  Rss, Plane, Ship, Satellite, Download, Loader2, Flame, Globe2, Waves,
 } from "lucide-react";
 
 const FREE_FEEDS = [
@@ -163,6 +163,19 @@ export default function LiveDataPanel() {
           <Button size="sm" variant="outline" className="w-full" onClick={() => handleLiveIngest("nasa_firms")} disabled={liveLoading === "nasa_firms"}>
             {liveLoading === "nasa_firms" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Flame className="mr-1 h-3 w-3" />}
             Fetch Fires
+          </Button>
+        </div>
+
+        {/* NOAA Bayou Sensors */}
+        <div className="rounded-md border border-primary/30 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Waves className="h-4 w-4 text-primary" />
+            <span className="text-xs font-bold">NOAA Bayou Sensors</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground">15 Gulf Coast & bayou water level stations — storm surge alerts</p>
+          <Button size="sm" variant="outline" className="w-full" onClick={() => handleLiveIngest("noaa_water")} disabled={liveLoading === "noaa_water"}>
+            {liveLoading === "noaa_water" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Waves className="mr-1 h-3 w-3" />}
+            Fetch Water Levels
           </Button>
         </div>
       </div>

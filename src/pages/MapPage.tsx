@@ -52,19 +52,33 @@ export default function MapPage() {
 
     geoProducts.forEach((p) => {
       const color = priorityColors[p.priority || "routine"];
-      const radius = p.priority === "critical" ? 10 : p.priority === "high" ? 8 : 6;
+      const content = p.content as Record<string, unknown> | null;
+      const isBayou = content && (content as any).sensor_type === "bayou_water_level";
+      const radius = p.priority === "critical" ? 12 : p.priority === "high" ? 10 : isBayou ? 9 : 6;
+
       const marker = L.circleMarker([p.latitude!, p.longitude!], {
         radius,
-        color,
-        fillColor: color,
-        fillOpacity: 0.6,
-        weight: 2,
+        color: isBayou ? "#00bfff" : color,
+        fillColor: isBayou ? (p.priority === "critical" ? "#e04848" : p.priority === "high" ? "#e8a020" : "#00bfff") : color,
+        fillOpacity: isBayou ? 0.8 : 0.6,
+        weight: isBayou ? 3 : 2,
+        dashArray: isBayou ? "4 2" : undefined,
       });
+
+      const waterInfo = isBayou ? `
+        <br/><strong>Water Level:</strong> ${(content as any).water_level_ft?.toFixed(2)}ft (MHHW)
+        <br/><strong>Trend:</strong> ${(content as any).trend_direction} (${(content as any).trend_change_ft > 0 ? "+" : ""}${(content as any).trend_change_ft}ft)
+        ${(content as any).high_water_alert ? '<br/><span style="color:#e8a020;font-weight:bold">⚠ HIGH WATER ALERT</span>' : ""}
+        ${(content as any).critical_alert ? '<br/><span style="color:#e04848;font-weight:bold">🔴 CRITICAL STORM SURGE</span>' : ""}
+      ` : "";
+
       marker.bindPopup(`
         <div style="font-family:Inter,sans-serif;font-size:12px;color:#1a1a2e">
           <strong>${p.title}</strong><br/>
           ${p.source_type} • ${p.source_identifier || "unknown"}<br/>
           Score: ${p.priority_score != null ? `${(Number(p.priority_score) * 100).toFixed(0)}%` : "—"}
+          ${waterInfo}
+          ${p.priority_reasoning ? `<br/><em style="font-size:10px">${p.priority_reasoning}</em>` : ""}
         </div>
       `);
       markersRef.current!.addLayer(marker);
