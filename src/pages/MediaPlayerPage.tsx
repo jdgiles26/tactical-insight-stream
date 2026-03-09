@@ -11,7 +11,7 @@ interface StreamSource {
   id: string;
   label: string;
   src: string;
-  type: "hls" | "dash" | "mp4" | "youtube" | "rtsp_proxy";
+  type: "hls" | "dash" | "mp4" | "youtube" | "rtsp_proxy" | "iframe";
 }
 
 const STORAGE_KEY = "media_player_sources_v1";
