@@ -11,7 +11,7 @@ interface StreamSource {
   id: string;
   label: string;
   src: string;
-  type: "hls" | "dash" | "mp4" | "youtube" | "rtsp_proxy";
+  type: "hls" | "dash" | "mp4" | "youtube" | "rtsp_proxy" | "iframe";
 }
 
 const STORAGE_KEY = "media_player_sources_v1";
@@ -25,17 +25,7 @@ const LAYOUT_OPTIONS = [
   { value: "5x5", label: "5×5", cols: 5, rows: 5, count: 25 },
 ] as const;
 
-const DEFAULT_SOURCES: StreamSource[] = [
-  {
-    id: "ozark-43rdst",
-    label: "43rd St Live (Ozark)",
-    src: "https://relay.ozark-tech.com/live/43rdst.stream/playlist.m3u8",
-    type: "hls",
-  },
-  { id: "demo-hls-1", label: "Port Cam Alpha", src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", type: "hls" },
-  { id: "demo-hls-2", label: "Harbor Entrance", src: "https://cdn.jwplayer.com/manifests/pZxWPRg4.m3u8", type: "hls" },
-  { id: "demo-mp4", label: "Patrol Feed", src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", type: "mp4" },
-];
+const DEFAULT_SOURCES: StreamSource[] = [];
 
 function getInitialLayout() {
   const saved = localStorage.getItem(LAYOUT_KEY);
@@ -45,9 +35,6 @@ function getInitialLayout() {
 
 function getInitialSources(slotCount: number) {
   const fallback = Array(slotCount).fill(null);
-  DEFAULT_SOURCES.forEach((source, index) => {
-    if (index < slotCount) fallback[index] = source;
-  });
 
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return fallback;
@@ -56,14 +43,8 @@ function getInitialSources(slotCount: number) {
     const parsed = JSON.parse(saved) as (StreamSource | null)[];
     if (!Array.isArray(parsed)) return fallback;
 
-    const cleaned = parsed.filter((s) => s !== null) as StreamSource[];
-    const hasPrimary = cleaned.some((s) => s.src === "https://relay.ozark-tech.com/live/43rdst.stream/playlist.m3u8");
-    const normalized = hasPrimary
-      ? cleaned
-      : [DEFAULT_SOURCES[0], ...cleaned].slice(0, slotCount);
-
     const padded = Array(slotCount).fill(null);
-    normalized.forEach((s, i) => {
+    parsed.forEach((s, i) => {
       if (i < slotCount) padded[i] = s;
     });
     return padded;
@@ -161,22 +142,22 @@ function VideoCell({ source, index, onRemove }: { source: StreamSource | null; i
     videoRef.current?.requestFullscreen?.();
   };
 
-  const isYoutube = source.type === "youtube";
+  const isEmbedded = source.type === "youtube" || source.type === "iframe";
 
   return (
     <div className="relative group border border-border rounded-md overflow-hidden bg-background aspect-video">
-      {isYoutube ? (
+      {isEmbedded ? (
         <iframe
-          src={source.src.replace("watch?v=", "embed/") + "?autoplay=1&mute=1"}
+          src={source.type === "youtube" ? source.src.replace("watch?v=", "embed/") + "?autoplay=1&mute=1" : source.src}
           className="w-full h-full"
-          allow="autoplay; encrypted-media"
+          allow="autoplay; encrypted-media; fullscreen"
           allowFullScreen
         />
       ) : (
         <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted loop playsInline />
       )}
 
-      {hasError && !isYoutube && (
+      {hasError && !isEmbedded && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
           <p className="text-xs font-mono text-muted-foreground px-2 text-center">Stream unavailable. Check URL/CORS/source access.</p>
         </div>
@@ -188,7 +169,7 @@ function VideoCell({ source, index, onRemove }: { source: StreamSource | null; i
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 flex items-center gap-0.5 p-1 bg-gradient-to-t from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-20">
-        {!isYoutube && (
+        {!isEmbedded && (
           <>
             <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={togglePlay}>
               {playing ? <Pause className="h-2.5 w-2.5" /> : <Play className="h-2.5 w-2.5" />}
@@ -341,10 +322,11 @@ export default function MediaPlayerPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="hls">HLS</SelectItem>
+                  <SelectItem value="hls">HLS (.m3u8)</SelectItem>
                   <SelectItem value="dash">DASH</SelectItem>
                   <SelectItem value="mp4">MP4</SelectItem>
                   <SelectItem value="youtube">YouTube</SelectItem>
+                  <SelectItem value="iframe">Iframe Embed</SelectItem>
                   <SelectItem value="rtsp_proxy">RTSP Proxy</SelectItem>
                 </SelectContent>
               </Select>
