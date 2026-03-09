@@ -25,17 +25,7 @@ const LAYOUT_OPTIONS = [
   { value: "5x5", label: "5×5", cols: 5, rows: 5, count: 25 },
 ] as const;
 
-const DEFAULT_SOURCES: StreamSource[] = [
-  {
-    id: "ozark-43rdst",
-    label: "43rd St Live (Ozark)",
-    src: "https://relay.ozark-tech.com/live/43rdst.stream/playlist.m3u8",
-    type: "hls",
-  },
-  { id: "demo-hls-1", label: "Port Cam Alpha", src: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", type: "hls" },
-  { id: "demo-hls-2", label: "Harbor Entrance", src: "https://cdn.jwplayer.com/manifests/pZxWPRg4.m3u8", type: "hls" },
-  { id: "demo-mp4", label: "Patrol Feed", src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", type: "mp4" },
-];
+const DEFAULT_SOURCES: StreamSource[] = [];
 
 function getInitialLayout() {
   const saved = localStorage.getItem(LAYOUT_KEY);
