@@ -23,6 +23,10 @@ const SOURCES = {
     url: "https://firms.modaps.eosdis.nasa.gov/api/area/csv/MODIS_NRT",
     label: "NASA FIRMS Active Fires",
   },
+  noaa_water: {
+    url: "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter",
+    label: "NOAA Tides & Water Levels (Bayou/Gulf Sensors)",
+  },
 };
 
 const OPENSKY_REGIONS: Record<string, { lamin: number; lomin: number; lamax: number; lomax: number }> = {
