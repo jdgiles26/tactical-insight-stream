@@ -81,7 +81,11 @@ Deno.serve(async (req) => {
       return await ingestNasaFIRMS(supabase, sourceId, bounds || (region && OPENSKY_REGIONS[region]));
     }
 
-    return jsonResponse({ error: "Unknown source. Use: opensky, ais, nasa_eonet, nasa_firms" }, 400);
+    if (source === "noaa_water") {
+      return await ingestNOAAWater(supabase, sourceId);
+    }
+
+    return jsonResponse({ error: "Unknown source. Use: opensky, ais, nasa_eonet, nasa_firms, noaa_water" }, 400);
   } catch (err) {
     console.error("Live data ingestion error:", err);
     return jsonResponse({ error: String(err) }, 500);
