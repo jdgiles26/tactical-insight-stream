@@ -13,7 +13,24 @@ export function useDataProducts() {
         .from("data_products")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(100);
+        .limit(500);
+      if (error) throw error;
+      return data as DataProduct[];
+    },
+  });
+}
+
+export function useAllGeoProducts() {
+  return useQuery({
+    queryKey: ["data_products_geo"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("data_products")
+        .select("*")
+        .not("latitude", "is", null)
+        .not("longitude", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1000);
       if (error) throw error;
       return data as DataProduct[];
     },
