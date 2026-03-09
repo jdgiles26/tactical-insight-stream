@@ -120,6 +120,27 @@ export default function StormThreatPanel() {
     });
   }, [assessment.score, sensors.length]);
 
+  // Escalation detection
+  useEffect(() => {
+    if (sensors.length === 0) return;
+    const prev = prevLevelRef.current;
+    const curr = assessment.level;
+    prevLevelRef.current = curr;
+
+    if (prev && LEVEL_ORDER.indexOf(curr) > LEVEL_ORDER.indexOf(prev)) {
+      toast.error(`⚠️ STORM THREAT ESCALATED: ${prev} → ${curr}`, {
+        description: assessment.details.join(" • "),
+        duration: 15000,
+        important: true,
+      });
+    } else if (prev && LEVEL_ORDER.indexOf(curr) < LEVEL_ORDER.indexOf(prev)) {
+      toast.success(`✅ Storm threat de-escalated: ${prev} → ${curr}`, {
+        description: "Conditions improving across monitored stations.",
+        duration: 8000,
+      });
+    }
+  }, [assessment.level, sensors.length]);
+
   const TrendIcon = ({ trend }: { trend: string }) => {
     if (trend === "rising_fast") return <TrendingUp className="h-3 w-3 text-destructive" />;
     if (trend === "rising") return <TrendingUp className="h-3 w-3 text-warning" />;
