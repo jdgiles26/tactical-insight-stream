@@ -34,6 +34,7 @@ export function useAllGeoProducts() {
       if (error) throw error;
       return data as DataProduct[];
     },
+    refetchInterval: 15 * 60 * 1000, // auto-refresh every 15 min
   });
 }
 
