@@ -34,6 +34,8 @@ interface SensorReading {
 
 export default function StormThreatPanel() {
   const { data: products = [], isLoading } = useAllGeoProducts();
+  const LEVEL_ORDER: ThreatLevel[] = ["MINIMAL", "GUARDED", "ELEVATED", "HIGH", "SEVERE"];
+  const prevLevelRef = useRef<ThreatLevel | null>(null);
 
   const sensors = useMemo<SensorReading[]>(() => {
     return products
