@@ -530,6 +530,45 @@ export type Database = {
           },
         ]
       }
+      storm_threat_history: {
+        Row: {
+          avg_water_level: number | null
+          critical_count: number
+          details: Json | null
+          high_count: number
+          id: string
+          max_water_level: number | null
+          recorded_at: string
+          score: number
+          sensor_count: number
+          threat_level: string
+        }
+        Insert: {
+          avg_water_level?: number | null
+          critical_count?: number
+          details?: Json | null
+          high_count?: number
+          id?: string
+          max_water_level?: number | null
+          recorded_at?: string
+          score?: number
+          sensor_count?: number
+          threat_level: string
+        }
+        Update: {
+          avg_water_level?: number | null
+          critical_count?: number
+          details?: Json | null
+          high_count?: number
+          id?: string
+          max_water_level?: number | null
+          recorded_at?: string
+          score?: number
+          sensor_count?: number
+          threat_level?: string
+        }
+        Relationships: []
+      }
       system_metrics: {
         Row: {
           id: string
