@@ -157,7 +157,7 @@ function VideoCell({ source, index, onRemove }: { source: StreamSource | null; i
         <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted loop playsInline />
       )}
 
-      {hasError && !isYoutube && (
+      {hasError && !isEmbedded && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
           <p className="text-xs font-mono text-muted-foreground px-2 text-center">Stream unavailable. Check URL/CORS/source access.</p>
         </div>
