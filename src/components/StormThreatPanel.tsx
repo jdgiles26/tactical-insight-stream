@@ -97,6 +97,26 @@ export default function StormThreatPanel() {
 
   const cfg = THREAT_CONFIG[assessment.level];
 
+  // Record snapshot when assessment changes
+  const recordSnapshot = useRecordStormSnapshot();
+  const lastRecordedScore = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (sensors.length === 0) return;
+    if (lastRecordedScore.current === assessment.score) return;
+    lastRecordedScore.current = assessment.score;
+    recordSnapshot.mutate({
+      threat_level: assessment.level,
+      score: assessment.score,
+      sensor_count: sensors.length,
+      critical_count: (assessment as any).criticalCount ?? 0,
+      high_count: (assessment as any).highCount ?? 0,
+      avg_water_level: (assessment as any).avgLevel ?? null,
+      max_water_level: (assessment as any).maxLevel ?? null,
+      details: assessment.details,
+    });
+  }, [assessment.score, sensors.length]);
+
   const TrendIcon = ({ trend }: { trend: string }) => {
     if (trend === "rising_fast") return <TrendingUp className="h-3 w-3 text-destructive" />;
     if (trend === "rising") return <TrendingUp className="h-3 w-3 text-warning" />;

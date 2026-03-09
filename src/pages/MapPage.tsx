@@ -104,6 +104,9 @@ export default function MapPage() {
       {/* Storm Threat Assessment */}
       <StormThreatPanel />
 
+      {/* Storm History Timeline */}
+      <StormHistoryTimeline />
+
       {/* Map Tabs */}
       <Tabs defaultValue="ops" className="space-y-3">
         <TabsList className="bg-secondary">
