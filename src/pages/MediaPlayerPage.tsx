@@ -322,10 +322,11 @@ export default function MediaPlayerPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="hls">HLS</SelectItem>
+                  <SelectItem value="hls">HLS (.m3u8)</SelectItem>
                   <SelectItem value="dash">DASH</SelectItem>
                   <SelectItem value="mp4">MP4</SelectItem>
                   <SelectItem value="youtube">YouTube</SelectItem>
+                  <SelectItem value="iframe">Iframe Embed</SelectItem>
                   <SelectItem value="rtsp_proxy">RTSP Proxy</SelectItem>
                 </SelectContent>
               </Select>
