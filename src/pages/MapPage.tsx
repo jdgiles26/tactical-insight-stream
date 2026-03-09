@@ -13,7 +13,7 @@ const priorityColors: Record<string, string> = {
 };
 
 export default function MapPage() {
-  const { data: products = [], isLoading } = useDataProducts();
+  const { data: products = [], isLoading } = useAllGeoProducts();
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
