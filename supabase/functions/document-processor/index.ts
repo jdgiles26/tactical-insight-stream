@@ -98,7 +98,7 @@ async function extractTextFromProduct(
     parts.push(file_path.replace(/[_\-/]/g, " ").replace(/\.[^.]+$/, ""));
   }
 
-  return parts.join(". ").slice(0, 512); // limit to 512 chars for API efficiency
+  return parts.join(". ").slice(0, 2048); // HuggingFace API accepts up to 512 tokens; 2048 chars is a safe upper bound
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -392,7 +392,7 @@ Deno.serve(async (req) => {
 // Token overlap similarity for label matching
 function tokenOverlap(a: string, b: string): boolean {
   const ta = a.split(/[\s_]+/).filter((w) => w.length > 3);
-  const tb = b.split(/[\s_]+/).filter((w) => w.length > 3);
-  return ta.some((w) => tb.includes(w));
+  const tb = new Set(b.split(/[\s_]+/).filter((w) => w.length > 3));
+  return ta.some((w) => tb.has(w));
 }
 

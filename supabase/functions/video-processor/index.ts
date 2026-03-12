@@ -280,41 +280,22 @@ Deno.serve(async (req) => {
     }> = [];
 
     let modelSource = "heuristic";
+    const modelLoaded = !!modelBytes;
 
-    const modelBytes = await loadYoloModelBytes(supabase);
-
-    if (modelBytes) {
-      // Download video from Supabase Storage for frame extraction
-      let videoFrameInput: Float32Array | null = null;
-      try {
-        const { data: videoBlob } = await supabase.storage
-          .from("uploads")
-          .download(file_path);
-        if (videoBlob) {
-          // Create a synthetic input tensor (640×640×3) normalised to [0,1]
-          // In a full implementation this would decode video frames via ffmpeg/canvas
-          // For now we use a zero-filled tensor as placeholder for the real frame data
-          // Real frame decoding requires server-side ffmpeg or canvas API
-          videoFrameInput = new Float32Array(3 * YOLO_INPUT_HEIGHT * YOLO_INPUT_WIDTH);
-          console.log("Video downloaded for YOLO inference, using input tensor");
-        }
-      } catch (e) {
-        console.warn("Video download for frame extraction failed:", e);
-      }
-
-      if (videoFrameInput) {
-        const onnxResults = await runOnnxInference(
-          modelBytes,
-          videoFrameInput,
-          YOLO_INPUT_WIDTH,
-          YOLO_INPUT_HEIGHT
-        );
-        if (onnxResults.length > 0) {
-          // Assign frame numbers across detections
-          maritimeDetections = onnxResults.map((d, i) => ({ ...d, frame: (i + 1) * 30 }));
-          modelSource = "onnx:best-boat.onnx";
-        }
-      }
+    if (modelLoaded) {
+      // NOTE: Full frame-by-frame YOLO inference requires server-side video decoding
+      // (e.g. ffmpeg, MediaRecorder, or canvas) to extract pixel data from video frames.
+      // Deno Edge Functions do not have native ffmpeg/canvas support, so live frame
+      // extraction is not available in this runtime.
+      //
+      // To enable real ONNX inference:
+      //   1. Deploy a separate video-frame-extractor service (e.g. a Cloud Run container
+      //      with ffmpeg) that decodes frames and returns Float32Array pixel buffers.
+      //   2. Call that service here, then pass the pixel buffer to runOnnxInference().
+      //
+      // Until then, the heuristic fallback is used even when the model is present.
+      // Set YOLO_MODEL_URL to ensure the model is available for when frame extraction is added.
+      console.log("YOLO ONNX model loaded — frame extraction requires server-side ffmpeg; using heuristic fallback.");
     }
 
     // Fall back to heuristic if model unavailable or no detections
@@ -421,10 +402,10 @@ Deno.serve(async (req) => {
         yolo_model: "best-boat.onnx",
         yolo_classes: YOLO_CLASSES,
         confidence_threshold: YOLO_CONFIDENCE_THRESHOLD,
-        onnx_enabled: modelSource.startsWith("onnx"),
-        setup_note: modelSource === "heuristic"
-          ? "Upload best-boat.onnx to Supabase Storage bucket 'models' and set YOLO_MODEL_URL to enable live ONNX inference."
-          : undefined,
+        onnx_enabled: false,
+        setup_note: modelLoaded
+          ? "YOLO model loaded. Frame extraction requires server-side ffmpeg — deploy a frame extractor service to enable live ONNX inference."
+          : "Upload best-boat.onnx to Supabase Storage bucket 'models' and set YOLO_MODEL_URL to enable ONNX inference.",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
