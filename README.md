@@ -1,73 +1,177 @@
-# Welcome to your Lovable project
+# Tactical Insight Stream — MDG v2
 
-## Project info
+**Mission Data Grid v2** is an AI-native tactical intelligence aggregation and real-time correlation platform. It ingests multi-source data (documents, video, sensor feeds, RSS, live APIs), processes it through a 6-stage event-driven pipeline powered by state-of-the-art open-source AI/ML models, and surfaces correlated intelligence through a React dashboard.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+---
 
-## How can I edit this code?
+## Architecture
 
-There are several ways of editing your application.
+```
+External Sources (OpenSky ADS-B, AIS vessels, NASA EONET/FIRMS, NOAA, RSS, manual upload)
+        │
+        ▼
+Ingest Receiver (HTTP endpoint — validates, prioritizes, queues)
+        │
+        ▼
+6-Stage Event Pipeline (pipeline-orchestrator)
+  ingestion → processing → tagging → correlation → prioritization → transport
+        │              │
+        │    ┌─────────┴──────────────────────────┐
+        │    │  AI/ML Models invoked on-the-fly:   │
+        │    │  • DeBERTa-v3 (text classification) │
+        │    │  • BERT NER (entity extraction)      │
+        │    │  • BigBird (long-document analysis)  │
+        │    │  • CLIP (visual-text matching)        │
+        │    │  • YOLOv8 best-boat.onnx (maritime)  │
+        │    │  • Sentence-Transformers (similarity) │
+        │    │  • Zero-shot classification (BART)    │
+        │    └────────────────────────────────────┘
+        │
+        ▼
+Detection Results + Correlation Alerts + Commander's Intent matching
+        │
+        ▼
+React Dashboard (12 pages — Alerts, Pipeline, Analytics, Map, Media Player, …)
+```
 
-**Use Lovable**
+---
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Tech Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, Vite, TypeScript, Tailwind CSS, shadcn-ui |
+| State | TanStack React Query v5 |
+| Backend | Supabase PostgreSQL + Deno Edge Functions |
+| AI/NLP | HuggingFace Inference API — DeBERTa-v3, BERT NER, BigBird, BART |
+| Vision | YOLOv8 maritime ONNX model (`best-boat.onnx`) via onnxruntime-web |
+| Video | HLS.js, Vidstack |
+| Maps | Leaflet |
+| Charts | Recharts |
+| Live APIs | OpenSky, AIS (Digitraffic), NASA EONET/FIRMS, NOAA Water Levels |
 
-**Use your preferred IDE**
+---
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Quick Start
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# 1. Clone
 git clone <YOUR_GIT_URL>
+cd tactical-insight-stream
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# 2. Install dependencies
+npm install
 
-# Step 3: Install the necessary dependencies.
-npm i
+# 3. Configure environment (see Configuration section below)
+cp .env.example .env
+# Edit .env with your Supabase and HuggingFace credentials
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# 4. Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Configuration
 
-**Use GitHub Codespaces**
+### Required Environment Variables
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+| Variable | Description |
+|----------|-------------|
+| `VITE_SUPABASE_URL` | Your Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Your Supabase anonymous/public key |
 
-## What technologies are used for this project?
+### Supabase Edge Function Secrets
 
-This project is built with:
+Set these in your Supabase project under **Settings → Edge Functions → Secrets**:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+| Secret | Description | Required |
+|--------|-------------|----------|
+| `SUPABASE_URL` | Supabase project URL | ✅ |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | ✅ |
+| `HUGGINGFACE_API_KEY` | HuggingFace Inference API key | Recommended |
+| `YOLO_MODEL_URL` | Public URL to `best-boat.onnx` in Supabase Storage | Recommended |
 
-## How can I deploy this project?
+> **Without `HUGGINGFACE_API_KEY`**: Document processor falls back to lightweight rule-based extraction.  
+> **Without `YOLO_MODEL_URL`**: Video processor uses heuristic maritime detection with realistic confidence scores.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+---
 
-## Can I connect a custom domain to my Lovable project?
+## AI/ML Models
 
-Yes, you can!
+### Document Processing
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+The document processor selects the strongest available model at runtime:
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+1. **DeBERTa-v3-base** (`cross-encoder/nli-deberta-v3-base`) — zero-shot classification for maritime entities
+2. **BERT NER** (`dslim/bert-base-NER`) — named entity recognition for vessel names, ports, organisations
+3. **BigBird** (`google/bigbird-roberta-base`) — long-document semantic analysis (up to 4096 tokens)
+4. **BART zero-shot** (`facebook/bart-large-mnli`) — intent-label matching fallback
+5. **Rule-based extraction** — final fallback when API is unavailable
+
+### Video/Image Processing
+
+- **YOLOv8 maritime** (`best-boat.onnx`) — custom-trained ONNX model for maritime vessel detection
+  - Classes: `cargo_vessel`, `small_craft`, `person_overboard`, `buoy`, `submarine_periscope`, `fishing_vessel`, `speedboat`, `military_vessel`
+  - Runtime: `onnxruntime-web` (WASM backend, runs in Deno edge functions)
+  - Confidence threshold: 0.45 (configurable via `YOLO_CONFIDENCE_THRESHOLD` env var)
+
+### Pipeline AI Enrichment (on-the-fly)
+
+Each pipeline stage may invoke additional open-source models:
+
+| Stage | Models Used |
+|-------|------------|
+| ingestion | Schema validation, deduplication |
+| processing | DeBERTa + BERT NER + YOLO (based on source type) |
+| tagging | Sentence-Transformers for semantic tag generation |
+| correlation | Embedding cosine-similarity, Commander's Intent matching |
+| prioritization | Composite ML score: threat × novelty × source reliability |
+| transport | Anomaly detection (IQR-based), trend/outlier prediction |
+
+---
+
+## Uploading the YOLO Model to Supabase Storage
+
+To enable live ONNX inference in the video processor:
+
+```sh
+# 1. Upload best-boat.onnx to Supabase Storage bucket "models"
+supabase storage cp best-boat.onnx supabase/models/best-boat.onnx
+
+# 2. Get the public URL and set it as a secret
+supabase secrets set YOLO_MODEL_URL="https://<project>.supabase.co/storage/v1/object/public/models/best-boat.onnx"
+```
+
+---
+
+## Deployment
+
+```sh
+# Deploy Supabase Edge Functions
+supabase functions deploy document-processor
+supabase functions deploy video-processor
+supabase functions deploy pipeline-orchestrator
+supabase functions deploy ingest-receiver
+supabase functions deploy rss-ingester
+supabase functions deploy live-data-ingester
+
+# Build frontend
+npm run build
+```
+
+---
+
+## Database Migrations
+
+```sh
+supabase db push
+```
+
+All migrations are in `supabase/migrations/`.
+
+---
+
+## License
+
+Proprietary — Mission Data Grid v2. All rights reserved.

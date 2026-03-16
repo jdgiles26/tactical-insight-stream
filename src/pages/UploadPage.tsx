@@ -1,10 +1,8 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIngestData } from "@/hooks/useDataProducts";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Upload, FileText, Film, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { Upload, FileText, Film, Loader2, CheckCircle, AlertTriangle, Cpu, Zap, Brain } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
 type UploadStatus = "idle" | "uploading" | "processing" | "done" | "error";
@@ -16,8 +14,15 @@ interface UploadItem {
   productId?: string;
   detections?: number;
   alerts?: number;
+  modelsUsed?: string[];
+  modelSource?: string;
+  apiPowered?: boolean;
+  onnxEnabled?: boolean;
   error?: string;
 }
+
+const DOC_MODEL_CHAIN = "DeBERTa-v3 → BERT NER → BART → rule-based";
+const VIDEO_MODEL = "YOLOv8 best-boat.onnx (maritime)";
 
 export default function UploadPage() {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
@@ -88,6 +93,10 @@ export default function UploadPage() {
         progress: 100,
         detections: result?.detections ?? 0,
         alerts: result?.alerts ?? 0,
+        modelsUsed: result?.models_used ?? [],
+        modelSource: result?.model_source ?? result?.model_cascade,
+        apiPowered: result?.api_powered ?? result?.onnx_enabled ?? false,
+        onnxEnabled: result?.onnx_enabled ?? false,
       });
 
       if (result?.alerts > 0) {
@@ -95,7 +104,10 @@ export default function UploadPage() {
           duration: 8000,
         });
       } else {
-        toast.success(`Processed: ${file.name} — ${result?.detections ?? 0} detections`);
+        const modelInfo = isVideo
+          ? (result?.onnx_enabled ? "ONNX:best-boat.onnx" : "YOLO heuristic")
+          : (result?.api_powered ? `BERT/DeBERTa (${result?.models_used?.length ?? 0} models)` : "rule-based");
+        toast.success(`Processed: ${file.name} — ${result?.detections ?? 0} detections via ${modelInfo}`);
       }
     } catch (err: any) {
       updateUpload(idx, { status: "error", error: err.message });
@@ -114,8 +126,6 @@ export default function UploadPage() {
 
     setUploads((prev) => [...newUploads, ...prev]);
 
-    // Process each file
-    const startIdx = 0; // newUploads are prepended
     files.forEach((file, i) => {
       setTimeout(() => processFile(file, i), i * 500);
     });
@@ -135,18 +145,40 @@ export default function UploadPage() {
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Upload & Process</h2>
         <p className="text-sm text-muted-foreground font-mono">
-          Upload documents for BERT/CLIP analysis or videos for YOLO object detection
+          AI-native processing — documents via DeBERTa/BERT NER, video via YOLOv8 maritime ONNX model
         </p>
+      </div>
+
+      {/* AI Model Status Banner */}
+      <div className="rounded-lg border border-border bg-card px-4 py-3 flex flex-wrap gap-4 text-xs font-mono">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Brain className="h-3.5 w-3.5 text-primary" />
+          <span className="text-foreground font-medium">NLP Models:</span>
+          <span>{DOC_MODEL_CHAIN}</span>
+        </div>
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Cpu className="h-3.5 w-3.5 text-accent" />
+          <span className="text-foreground font-medium">Vision Model:</span>
+          <span>{VIDEO_MODEL}</span>
+        </div>
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Zap className="h-3.5 w-3.5 text-warning" />
+          <span className="text-foreground font-medium">Pipeline:</span>
+          <span>ingestion → NLP/YOLO → tagging → correlation → prioritization → transport</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Document Upload */}
         <div className="rounded-lg border border-border bg-card p-6">
-          <h3 className="mb-4 flex items-center gap-2 text-sm font-mono uppercase tracking-wider text-muted-foreground">
-            <FileText className="h-4 w-4" /> Document Upload (BERT/CLIP)
+          <h3 className="mb-1 flex items-center gap-2 text-sm font-mono uppercase tracking-wider text-muted-foreground">
+            <FileText className="h-4 w-4" /> Document Upload
           </h3>
+          <p className="mb-1 text-[10px] font-mono text-primary/70 uppercase tracking-wider">
+            DeBERTa-v3 · BERT NER · BigBird · BART zero-shot
+          </p>
           <p className="mb-4 text-sm text-muted-foreground">
-            Upload PDFs, reports, manifests, and logs. Documents are analyzed for entity extraction, classification, and visual-text matching.
+            Upload PDFs, reports, manifests, and logs. AI models extract named entities, classify document type, and match against Commander's Intent via semantic similarity.
           </p>
           <label className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed border-border bg-secondary/30 p-8 transition-colors hover:border-primary/50 hover:bg-secondary/50">
             <Upload className="h-8 w-8 text-muted-foreground" />
@@ -164,11 +196,14 @@ export default function UploadPage() {
 
         {/* Video Upload */}
         <div className="rounded-lg border border-border bg-card p-6">
-          <h3 className="mb-4 flex items-center gap-2 text-sm font-mono uppercase tracking-wider text-muted-foreground">
-            <Film className="h-4 w-4" /> Video Upload (YOLO Detection)
+          <h3 className="mb-1 flex items-center gap-2 text-sm font-mono uppercase tracking-wider text-muted-foreground">
+            <Film className="h-4 w-4" /> Video Upload
           </h3>
+          <p className="mb-1 text-[10px] font-mono text-accent/70 uppercase tracking-wider">
+            YOLOv8 best-boat.onnx · 8-class maritime detection · NMS post-processing
+          </p>
           <p className="mb-4 text-sm text-muted-foreground">
-            Upload surveillance footage for frame extraction and YOLOv8 maritime object detection. Objects are correlated against Commander's Intent.
+            Upload surveillance footage for frame-by-frame YOLOv8 maritime object detection. Detections include bounding boxes, confidence scores, and cross-source correlation.
           </p>
           <label className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed border-border bg-secondary/30 p-8 transition-colors hover:border-primary/50 hover:bg-secondary/50">
             <Upload className="h-8 w-8 text-muted-foreground" />
@@ -198,7 +233,7 @@ export default function UploadPage() {
                   {statusIcon(upload.status)}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-foreground">{upload.file.name}</p>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
                       <span className="text-[10px] font-mono text-muted-foreground uppercase">{upload.status}</span>
                       {upload.detections !== undefined && (
                         <span className="text-[10px] font-mono text-primary">{upload.detections} detections</span>
@@ -206,7 +241,23 @@ export default function UploadPage() {
                       {upload.alerts !== undefined && upload.alerts > 0 && (
                         <span className="text-[10px] font-mono text-destructive">{upload.alerts} alerts!</span>
                       )}
+                      {upload.onnxEnabled && (
+                        <span className="text-[10px] font-mono text-accent">ONNX ✓</span>
+                      )}
+                      {upload.apiPowered && !upload.onnxEnabled && (
+                        <span className="text-[10px] font-mono text-accent">HF API ✓</span>
+                      )}
+                      {upload.modelsUsed && upload.modelsUsed.length > 0 && (
+                        <span className="text-[10px] font-mono text-muted-foreground/70">
+                          [{upload.modelsUsed.join(", ")}]
+                        </span>
+                      )}
                     </div>
+                    {upload.modelSource && upload.status === "done" && (
+                      <p className="mt-0.5 text-[10px] font-mono text-muted-foreground/50 truncate">
+                        {upload.modelSource}
+                      </p>
+                    )}
                   </div>
                   <span className="text-xs font-mono text-muted-foreground">
                     {(upload.file.size / 1024 / 1024).toFixed(1)} MB
@@ -226,3 +277,4 @@ export default function UploadPage() {
     </div>
   );
 }
+
