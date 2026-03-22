@@ -309,9 +309,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Insert detections into DB
+    // ──────────────────────────────────────────────────────────────
+    // Insert detections into detection_results (for ML audit trail)
+    // ──────────────────────────────────────────────────────────────
+    const insertedDetectionIds: Record<string, string> = {};
     for (const det of maritimeDetections) {
-      await supabase.from("detection_results").insert({
+      const { data: detRow } = await supabase.from("detection_results").insert({
         data_product_id,
         detector_type: "yolo",
         label: det.label,
@@ -324,19 +327,78 @@ Deno.serve(async (req) => {
           yolo_model: "best-boat.onnx",
           confidence_threshold: YOLO_CONFIDENCE_THRESHOLD,
         },
-      });
+      }).select("id").single();
+      if (detRow?.id) insertedDetectionIds[det.label] = detRow.id;
     }
 
     // ──────────────────────────────────────────────────────────────
-    // Commander's Intent correlation
+    // SILENT OBJECT REGISTRY — deduplicated background tracking
+    // Objects are bounding-box tracked and deduplicated here.
+    // No alerts are generated at this stage. Alerts only fire when
+    // an active emergency trigger has a keyword match (below).
     // ──────────────────────────────────────────────────────────────
+    const registryIds: string[] = [];
+    for (const det of maritimeDetections) {
+      const objectUid = `${det.label}:${data_product_id}`;
+      const { data: existing } = await supabase
+        .from("silent_object_registry")
+        .select("id, seen_count")
+        .eq("object_uid", objectUid)
+        .maybeSingle();
+
+      if (existing) {
+        // Update last_seen and increment count — no new row
+        await supabase
+          .from("silent_object_registry")
+          .update({
+            last_seen_at: new Date().toISOString(),
+            seen_count: (existing.seen_count ?? 1) + 1,
+            confidence: det.confidence,
+            bounding_box: det.bbox,
+          } as any)
+          .eq("id", existing.id);
+        registryIds.push(existing.id);
+      } else {
+        const { data: newEntry } = await supabase
+          .from("silent_object_registry")
+          .insert({
+            object_uid: objectUid,
+            label: det.label,
+            confidence: det.confidence,
+            bounding_box: det.bbox,
+            source_type: "video",
+            data_product_id,
+            frame_metadata: { frame: det.frame ?? null, file_path },
+          } as any)
+          .select("id")
+          .single();
+        if (newEntry?.id) registryIds.push(newEntry.id);
+      }
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // TRIGGER-GATED CORRELATION
+    // Commander's Intent alerts are only created when:
+    //   a) The intent term is explicitly marked as an emergency trigger, OR
+    //   b) There is an active emergency_trigger for this time window.
+    // Silent registry objects do NOT fire alerts on their own.
+    // ──────────────────────────────────────────────────────────────
+    const { data: activeEmergencies } = await supabase
+      .from("emergency_triggers")
+      .select("id, key_elements, trigger_type, urgency_level, commander_intent")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
     const { data: intents } = await supabase
       .from("commander_intents")
       .select("*")
       .eq("is_active", true);
 
     const alerts: any[] = [];
-    if (intents) {
+
+    // Only generate correlation_alerts when a trigger keyword or active emergency exists
+    if (intents && (activeEmergencies?.length ?? 0) > 0) {
       for (const intent of intents) {
         const term = intent.term.toLowerCase();
         for (const det of maritimeDetections) {
@@ -357,10 +419,8 @@ Deno.serve(async (req) => {
 
     if (alerts.length > 0) {
       await supabase.from("correlation_alerts").insert(alerts);
-    }
 
-    // Cross-source correlation: same intent matched across multiple data products
-    if (intents && alerts.length > 0) {
+      // Cross-source correlation: same intent matched across multiple data products
       for (const alert of alerts) {
         const { data: relatedAlerts } = await supabase
           .from("correlation_alerts")
@@ -382,6 +442,107 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ──────────────────────────────────────────────────────────────
+    // RETROSPECTIVE MATCHING against active emergency triggers
+    // If an active emergency mentions a label seen in this video,
+    // pair the detection with the emergency via mission_groups.
+    // ──────────────────────────────────────────────────────────────
+    if (activeEmergencies && activeEmergencies.length > 0) {
+      for (const emergency of activeEmergencies) {
+        const keyElements = (emergency.key_elements as Record<string, string>) ?? {};
+        const triggerTerms = Object.values(keyElements)
+          .join(" ")
+          .toLowerCase()
+          .split(/[\s,;]+/)
+          .filter((t) => t.length > 2);
+
+        for (const det of maritimeDetections) {
+          const detLabel = det.label.toLowerCase().replace(/_/g, " ");
+          const matched = triggerTerms.some((t) => detLabel.includes(t) || t.includes(detLabel));
+          if (!matched) continue;
+
+          // Find or create a mission group for this emergency + label
+          const { data: existingGroup } = await supabase
+            .from("mission_groups")
+            .select("id")
+            .eq("trigger_id", emergency.id)
+            .ilike("group_name", `%${det.label}%`)
+            .maybeSingle();
+
+          let groupId = existingGroup?.id;
+          if (!groupId) {
+            const prediction = buildPrediction(det.label, emergency.trigger_type);
+            const { data: newGroup } = await supabase
+              .from("mission_groups")
+              .insert({
+                group_name: `${emergency.trigger_type.toUpperCase()}: ${det.label.replace(/_/g, " ")} match`,
+                trigger_id: emergency.id,
+                confidence: det.confidence > 0.8 ? "High" : det.confidence > 0.6 ? "Medium" : "Low",
+                risk_level: emergency.urgency_level === "critical" ? "Critical" : "High",
+                correlation_method: "keyword+yolo",
+                summary: `${det.label.replace(/_/g, " ")} detected in video matches emergency trigger key elements.`,
+                prediction,
+                metadata: {
+                  trigger_type: emergency.trigger_type,
+                  matched_label: det.label,
+                  confidence: det.confidence,
+                  data_product_id,
+                },
+              } as any)
+              .select("id")
+              .single();
+            groupId = newGroup?.id;
+          }
+
+          if (groupId) {
+            // Add the trigger document as evidence
+            const { data: existingTriggerEvidence } = await supabase
+              .from("group_evidence")
+              .select("id")
+              .eq("group_id", groupId)
+              .eq("evidence_type", "document")
+              .maybeSingle();
+
+            if (!existingTriggerEvidence) {
+              const { data: triggerProduct } = await supabase
+                .from("emergency_triggers")
+                .select("data_product_id")
+                .eq("id", emergency.id)
+                .single();
+              if (triggerProduct?.data_product_id) {
+                await supabase.from("group_evidence").insert({
+                  group_id: groupId,
+                  evidence_type: "document",
+                  data_product_id: triggerProduct.data_product_id,
+                  description: `Emergency trigger document (${emergency.trigger_type})`,
+                  timestamp_ref: new Date().toISOString(),
+                  metadata: { trigger_id: emergency.id, key_elements: emergency.key_elements },
+                } as any);
+              }
+            }
+
+            // Add this video detection as evidence
+            await supabase.from("group_evidence").insert({
+              group_id: groupId,
+              evidence_type: "yolo_detection",
+              data_product_id,
+              description: `${det.label.replace(/_/g, " ")} detected @ confidence ${(det.confidence * 100).toFixed(0)}%`,
+              timestamp_ref: new Date().toISOString(),
+              metadata: { label: det.label, confidence: det.confidence, bbox: det.bbox, frame: det.frame ?? null },
+            } as any);
+
+            // Mark registry entry as matched
+            if (registryIds.length > 0) {
+              await supabase
+                .from("silent_object_registry")
+                .update({ is_matched: true } as any)
+                .in("id", registryIds);
+            }
+          }
+        }
+      }
+    }
+
     await supabase
       .from("data_products")
       .update({ status: "tagged" })
@@ -397,7 +558,10 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         detections: maritimeDetections.length,
+        registry_entries: registryIds.length,
         alerts: alerts.length,
+        active_emergencies: activeEmergencies?.length ?? 0,
+        silent_mode: (activeEmergencies?.length ?? 0) === 0,
         model_source: modelSource,
         yolo_model: "best-boat.onnx",
         yolo_classes: YOLO_CLASSES,
@@ -422,5 +586,37 @@ function wordOverlap(a: string, b: string): boolean {
   const wa = a.split(/[\s_]+/);
   const wb = b.split(/[\s_]+/);
   return wa.some((w) => w.length > 2 && wb.includes(w));
+}
+
+// Generate a predictive risk assessment for a matched detection
+function buildPrediction(
+  label: string,
+  triggerType: string
+): Record<string, string> {
+  const riskMap: Record<string, string> = {
+    mayday: "Critical — immediate response required",
+    illegal: "High — intercept window closing",
+    opord: "High — mission engagement imminent",
+    disaster: "High — evacuation/response priority",
+    injury: "Critical — medical response required",
+    national_alert: "Critical — escalate to command",
+  };
+  const trajectoryMap: Record<string, string> = {
+    cargo_vessel: "Projected continued heading on current track",
+    small_craft: "High maneuverability — unpredictable trajectory",
+    speedboat: "High speed intercept capability — ETA variable",
+    military_vessel: "Mission-oriented heading — assess intent",
+    fishing_vessel: "Likely continuing fishing operations",
+    person_overboard: "Drift based on current/wind — time-critical",
+    submarine_periscope: "Submerged transit likely — last known position logged",
+    buoy: "Fixed reference — monitor for displacement",
+  };
+  return {
+    risk: riskMap[triggerType] ?? "Medium — monitor and assess",
+    trajectory: trajectoryMap[label] ?? "Monitor for movement pattern changes",
+    recommended_action: triggerType === "mayday" || triggerType === "injury"
+      ? "IMMEDIATE: Dispatch response unit"
+      : "MONITOR: Correlate with additional sources and update commander's intent",
+  };
 }
 
