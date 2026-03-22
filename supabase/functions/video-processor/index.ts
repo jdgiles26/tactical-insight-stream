@@ -280,22 +280,50 @@ Deno.serve(async (req) => {
     }> = [];
 
     let modelSource = "heuristic";
+    const modelBytes = await loadYoloModelBytes(supabase);
     const modelLoaded = !!modelBytes;
 
-    if (modelLoaded) {
+    if (modelLoaded && modelBytes) {
+      // Attempt real ONNX inference — requires preprocessed frame data.
       // NOTE: Full frame-by-frame YOLO inference requires server-side video decoding
-      // (e.g. ffmpeg, MediaRecorder, or canvas) to extract pixel data from video frames.
+      // (e.g. ffmpeg) to extract pixel data from video frames.
       // Deno Edge Functions do not have native ffmpeg/canvas support, so live frame
       // extraction is not available in this runtime.
       //
-      // To enable real ONNX inference:
-      //   1. Deploy a separate video-frame-extractor service (e.g. a Cloud Run container
-      //      with ffmpeg) that decodes frames and returns Float32Array pixel buffers.
-      //   2. Call that service here, then pass the pixel buffer to runOnnxInference().
+      // When a frame-extractor sidecar service is deployed, it returns Float32Array
+      // pixel buffers that are passed to runOnnxInference() here.
       //
-      // Until then, the heuristic fallback is used even when the model is present.
-      // Set YOLO_MODEL_URL to ensure the model is available for when frame extraction is added.
-      console.log("YOLO ONNX model loaded — frame extraction requires server-side ffmpeg; using heuristic fallback.");
+      // To enable real ONNX inference:
+      //   1. Deploy a video-frame-extractor service (e.g. Cloud Run with ffmpeg)
+      //   2. Call that service to get frame pixel buffers
+      //   3. Pass the pixel buffer to runOnnxInference()
+      const frameExtractorUrl = Deno.env.get("FRAME_EXTRACTOR_URL");
+      if (frameExtractorUrl) {
+        try {
+          const frameResp = await fetch(frameExtractorUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ file_path, width: YOLO_INPUT_WIDTH, height: YOLO_INPUT_HEIGHT }),
+            signal: AbortSignal.timeout(30000),
+          });
+          if (frameResp.ok) {
+            const frameBuffer = await frameResp.arrayBuffer();
+            const inputTensor = new Float32Array(frameBuffer);
+            maritimeDetections = await runOnnxInference(modelBytes, inputTensor, YOLO_INPUT_WIDTH, YOLO_INPUT_HEIGHT);
+            if (maritimeDetections.length > 0) {
+              modelSource = "yolo_onnx";
+            }
+          } else {
+            console.warn(`Frame extractor returned ${frameResp.status} — falling back to heuristic.`);
+          }
+        } catch (err) {
+          console.warn("Frame extractor call failed:", err);
+        }
+      } else {
+        console.log(
+          "YOLO ONNX model loaded — frame extraction requires FRAME_EXTRACTOR_URL env var; using heuristic fallback."
+        );
+      }
     }
 
     // Fall back to heuristic if model unavailable or no detections
@@ -382,6 +410,57 @@ Deno.serve(async (req) => {
     //   a) The intent term is explicitly marked as an emergency trigger, OR
     //   b) There is an active emergency_trigger for this time window.
     // Silent registry objects do NOT fire alerts on their own.
+    // AI Agent Analysis — Scene understanding & intelligence
+    // ──────────────────────────────────────────────────────────────
+    let aiAnalysis: any = null;
+    try {
+      const aiResponse = await supabase.functions.invoke("ai-analysis-agent", {
+        body: {
+          type: "video",
+          content: {
+            url: file_path,
+            detections: maritimeDetections,
+          },
+          metadata: {
+            file_path,
+            data_product_id,
+            model_source: modelSource,
+          },
+        },
+      });
+
+      if (aiResponse.data?.analysis) {
+        aiAnalysis = aiResponse.data.analysis;
+
+        // Update product with AI-enhanced analysis
+        await supabase
+          .from("data_products")
+          .update({
+            priority_score: aiAnalysis.priority_score,
+            priority: aiAnalysis.threat_level,
+            content: {
+              ...((await supabase.from("data_products").select("content").eq("id", data_product_id).single()).data?.content || {}),
+              ai_summary: aiAnalysis.summary,
+              ai_executive_summary: aiAnalysis.executive_summary,
+              ai_scene_description: aiAnalysis.scene_description,
+              ai_entities: aiAnalysis.entities,
+              ai_location_prediction: aiAnalysis.location_prediction,
+              ai_direction_of_travel: aiAnalysis.direction_of_travel,
+              ai_intent_prediction: aiAnalysis.intent_prediction,
+              ai_risk_factors: aiAnalysis.risk_factors,
+              ai_timeline: aiAnalysis.timeline,
+            },
+          })
+          .eq("id", data_product_id);
+
+        console.log(`AI video analysis completed for ${data_product_id}: priority=${aiAnalysis.priority_score}`);
+      }
+    } catch (aiErr) {
+      console.warn("AI video analysis failed (non-fatal):", aiErr);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Commander's Intent correlation
     // ──────────────────────────────────────────────────────────────
     const { data: activeEmergencies } = await supabase
       .from("emergency_triggers")

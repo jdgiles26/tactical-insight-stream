@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
 import {
   Rss, Plane, Ship, Satellite, Download, Loader2, Flame, Globe2, Waves,
 } from "lucide-react";
