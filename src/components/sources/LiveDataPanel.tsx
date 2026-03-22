@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
 import {
-  Rss, Plane, Ship, Satellite, Download, Loader2, Flame, Globe2, Waves,
+  Rss, Plane, Ship, Satellite, Download, Loader2, Flame, Globe2, Waves, Play, Square,
 } from "lucide-react";
+import { useBackgroundIngestion } from "@/hooks/useBackgroundIngestion";
 
 const FREE_FEEDS = [
   { key: "bbc_world", label: "BBC World News", category: "news" },
@@ -40,6 +42,7 @@ export default function LiveDataPanel() {
   const [rssLoading, setRssLoading] = useState(false);
   const [liveLoading, setLiveLoading] = useState<string | null>(null);
   const [selectedRegion, setSelectedRegion] = useState("caribbean_corridor");
+  const bgIngestion = useBackgroundIngestion(10_000);
 
   const handleRssIngest = async () => {
     setRssLoading(true);
@@ -90,6 +93,23 @@ export default function LiveDataPanel() {
               <option key={r.key} value={r.key}>{r.label}</option>
             ))}
           </select>
+          <Button
+            size="sm"
+            variant={bgIngestion.running ? "destructive" : "default"}
+            onClick={bgIngestion.running ? bgIngestion.stop : bgIngestion.start}
+            className="ml-2"
+          >
+            {bgIngestion.running ? (
+              <><Square className="mr-1 h-3 w-3" /> Stop Auto-Ingest</>
+            ) : (
+              <><Play className="mr-1 h-3 w-3" /> Auto-Ingest (10s)</>
+            )}
+          </Button>
+          {bgIngestion.running && (
+            <Badge variant="outline" className="text-[9px] font-mono">
+              Cycle {bgIngestion.cycleCount} • {bgIngestion.totalIngested} records
+            </Badge>
+          )}
         </div>
       </div>
 

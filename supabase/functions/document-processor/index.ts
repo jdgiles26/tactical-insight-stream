@@ -188,32 +188,63 @@ async function runZeroShot(
 function ruleBasedExtraction(
   text: string,
   filePath: string
-): Array<{ label: string; confidence: number; detector_type: string }> {
+): Array<{ label: string; confidence: number; detector_type: string; raw_entity?: string }> {
   const lowerText = (text + " " + filePath).toLowerCase();
-  const detections: Array<{ label: string; confidence: number; detector_type: string }> = [];
+  const detections: Array<{ label: string; confidence: number; detector_type: string; raw_entity?: string }> = [];
 
-  const patterns: Array<[RegExp, string, number]> = [
-    [/vessel|ship|boat|craft|tanker|frigate|destroyer|carrier/i, "vessel_name", 0.82],
-    [/port|harbor|harbour|anchorage|berth|pier|dock/i, "port_of_origin", 0.78],
+  // Patterns that extract actual entity values from text
+  const extractionPatterns: Array<{
+    regex: RegExp;
+    label: string;
+    confidence: number;
+  }> = [
+    { regex: /\b((?:USS|HMS|USNS|MV|MT|SS)\s+[A-Z][a-zA-Z\s]{2,20})\b/g, label: "vessel_name", confidence: 0.88 },
+    { regex: /\b(port\s+(?:of\s+)?[A-Z][a-zA-Z\s]{2,20})\b/gi, label: "port_of_origin", confidence: 0.82 },
+    { regex: /(-?\d{1,3}\.\d{2,6})[,\s]+(-?\d{1,3}\.\d{2,6})/g, label: "coordinates", confidence: 0.90 },
+    { regex: /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4})\b/gi, label: "date_time_group", confidence: 0.85 },
+    { regex: /\b((?:Captain|Admiral|Commander|Lt|Sgt|Col|Gen)\s+[A-Z][a-zA-Z\s]{2,25})\b/g, label: "personnel_identifier", confidence: 0.78 },
+  ];
+
+  // Extract actual entity values using capturing groups
+  for (const { regex, label, confidence } of extractionPatterns) {
+    const matches = (text + " " + filePath).matchAll(regex);
+    for (const match of matches) {
+      detections.push({
+        label,
+        confidence,
+        detector_type: "rule_based",
+        raw_entity: match[1] || match[0],
+      });
+    }
+  }
+
+  // Keyword-presence patterns (fallback when no extraction match)
+  const presencePatterns: Array<[RegExp, string, number]> = [
+    [/vessel|ship|boat|craft|tanker|frigate|destroyer|carrier/i, "vessel_name", 0.72],
+    [/port|harbor|harbour|anchorage|berth|pier|dock/i, "port_of_origin", 0.68],
     [/cargo|manifest|freight|load|tonnage|container/i, "cargo_manifest", 0.75],
     [/crew|personnel|sailor|officer|captain|admiral/i, "crew_roster", 0.72],
     [/official|stamp|seal|certified|signed|authoris/i, "official_stamp", 0.68],
     [/intel|intelligence|classified|report|assessment|analysis/i, "intelligence_report", 0.80],
-    [/coordinates|latitude|longitude|position|gps|location/i, "coordinates", 0.85],
+    [/coordinates|latitude|longitude|position|gps|location/i, "coordinates", 0.75],
     [/threat|hostile|enemy|warning|alert|danger/i, "threat_indicator", 0.88],
     [/weapon|missile|gun|torpedo|ordnance|munition/i, "weapon_system", 0.84],
     [/order|command|directive|mission|objective|task/i, "military_order", 0.76],
   ];
 
-  for (const [regex, label, conf] of patterns) {
-    if (regex.test(lowerText)) {
+  const existingLabels = new Set(detections.map((d) => d.label));
+  for (const [regex, label, conf] of presencePatterns) {
+    if (!existingLabels.has(label) && regex.test(lowerText)) {
       detections.push({ label, confidence: conf, detector_type: "rule_based" });
+      existingLabels.add(label);
     }
   }
 
   // Always include a document type classification
   if (/\.pdf$/i.test(filePath) || /document|report|manifest/i.test(lowerText)) {
-    detections.push({ label: "maritime_document", confidence: 0.91, detector_type: "rule_based" });
+    if (!existingLabels.has("maritime_document")) {
+      detections.push({ label: "maritime_document", confidence: 0.91, detector_type: "rule_based" });
+    }
   }
 
   return detections;

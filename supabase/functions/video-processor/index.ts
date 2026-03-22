@@ -280,22 +280,50 @@ Deno.serve(async (req) => {
     }> = [];
 
     let modelSource = "heuristic";
+    const modelBytes = await loadYoloModelBytes(supabase);
     const modelLoaded = !!modelBytes;
 
-    if (modelLoaded) {
+    if (modelLoaded && modelBytes) {
+      // Attempt real ONNX inference — requires preprocessed frame data.
       // NOTE: Full frame-by-frame YOLO inference requires server-side video decoding
-      // (e.g. ffmpeg, MediaRecorder, or canvas) to extract pixel data from video frames.
+      // (e.g. ffmpeg) to extract pixel data from video frames.
       // Deno Edge Functions do not have native ffmpeg/canvas support, so live frame
       // extraction is not available in this runtime.
       //
-      // To enable real ONNX inference:
-      //   1. Deploy a separate video-frame-extractor service (e.g. a Cloud Run container
-      //      with ffmpeg) that decodes frames and returns Float32Array pixel buffers.
-      //   2. Call that service here, then pass the pixel buffer to runOnnxInference().
+      // When a frame-extractor sidecar service is deployed, it returns Float32Array
+      // pixel buffers that are passed to runOnnxInference() here.
       //
-      // Until then, the heuristic fallback is used even when the model is present.
-      // Set YOLO_MODEL_URL to ensure the model is available for when frame extraction is added.
-      console.log("YOLO ONNX model loaded — frame extraction requires server-side ffmpeg; using heuristic fallback.");
+      // To enable real ONNX inference:
+      //   1. Deploy a video-frame-extractor service (e.g. Cloud Run with ffmpeg)
+      //   2. Call that service to get frame pixel buffers
+      //   3. Pass the pixel buffer to runOnnxInference()
+      const frameExtractorUrl = Deno.env.get("FRAME_EXTRACTOR_URL");
+      if (frameExtractorUrl) {
+        try {
+          const frameResp = await fetch(frameExtractorUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ file_path, width: YOLO_INPUT_WIDTH, height: YOLO_INPUT_HEIGHT }),
+            signal: AbortSignal.timeout(30000),
+          });
+          if (frameResp.ok) {
+            const frameBuffer = await frameResp.arrayBuffer();
+            const inputTensor = new Float32Array(frameBuffer);
+            maritimeDetections = await runOnnxInference(modelBytes, inputTensor, YOLO_INPUT_WIDTH, YOLO_INPUT_HEIGHT);
+            if (maritimeDetections.length > 0) {
+              modelSource = "yolo_onnx";
+            }
+          } else {
+            console.warn(`Frame extractor returned ${frameResp.status} — falling back to heuristic.`);
+          }
+        } catch (err) {
+          console.warn("Frame extractor call failed:", err);
+        }
+      } else {
+        console.log(
+          "YOLO ONNX model loaded — frame extraction requires FRAME_EXTRACTOR_URL env var; using heuristic fallback."
+        );
+      }
     }
 
     // Fall back to heuristic if model unavailable or no detections
