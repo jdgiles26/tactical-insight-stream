@@ -2,8 +2,9 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useIngestData } from "@/hooks/useDataProducts";
 import { toast } from "sonner";
-import { Upload, FileText, Film, Loader2, CheckCircle, AlertTriangle, Cpu, Zap, Brain } from "lucide-react";
+import { Upload, FileText, Film, Loader2, CheckCircle, AlertTriangle, Cpu, Zap, Brain, Siren } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 
 type UploadStatus = "idle" | "uploading" | "processing" | "done" | "error";
 
@@ -18,6 +19,9 @@ interface UploadItem {
   modelSource?: string;
   apiPowered?: boolean;
   onnxEnabled?: boolean;
+  emergencyDetected?: boolean;
+  emergencyType?: string;
+  missionGroupsCreated?: number;
   error?: string;
 }
 
@@ -97,9 +101,17 @@ export default function UploadPage() {
         modelSource: result?.model_source ?? result?.model_cascade,
         apiPowered: result?.api_powered ?? result?.onnx_enabled ?? false,
         onnxEnabled: result?.onnx_enabled ?? false,
+        emergencyDetected: result?.emergency_detected ?? false,
+        emergencyType: result?.emergency_type ?? null,
+        missionGroupsCreated: result?.mission_groups_created ?? 0,
       });
 
-      if (result?.alerts > 0) {
+      if (result?.emergency_detected) {
+        toast.error(
+          `🚨 EMERGENCY DETECTED: ${(result.emergency_type ?? "unknown").replace("_", " ").toUpperCase()} — ${result.mission_groups_created ?? 0} mission group(s) created. Check Alerts → Mission Groups.`,
+          { duration: 12000 }
+        );
+      } else if (result?.alerts > 0) {
         toast.warning(`⚠️ ${result.alerts} correlation alert(s) triggered for ${file.name}`, {
           duration: 8000,
         });
@@ -164,7 +176,12 @@ export default function UploadPage() {
         <div className="flex items-center gap-2 text-muted-foreground">
           <Zap className="h-3.5 w-3.5 text-warning" />
           <span className="text-foreground font-medium">Pipeline:</span>
-          <span>ingestion → NLP/YOLO → tagging → correlation → prioritization → transport</span>
+          <span>ingestion → NLP/YOLO → emergency detection → tagging → correlation → mission groups → transport</span>
+        </div>
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Siren className="h-3.5 w-3.5 text-red-400" />
+          <span className="text-foreground font-medium">Emergency triggers:</span>
+          <span>OPORD · Mayday · Disaster · Illegal Activity · Injury · National Alert</span>
         </div>
       </div>
 
@@ -240,6 +257,17 @@ export default function UploadPage() {
                       )}
                       {upload.alerts !== undefined && upload.alerts > 0 && (
                         <span className="text-[10px] font-mono text-destructive">{upload.alerts} alerts!</span>
+                      )}
+                      {upload.emergencyDetected && (
+                        <Badge className="text-[8px] bg-red-500/20 text-red-300 border-red-500/40 animate-pulse gap-1">
+                          <Siren className="h-2.5 w-2.5" />
+                          EMERGENCY: {(upload.emergencyType ?? "").replace("_", " ").toUpperCase()}
+                        </Badge>
+                      )}
+                      {upload.missionGroupsCreated !== undefined && upload.missionGroupsCreated > 0 && (
+                        <span className="text-[10px] font-mono text-red-400">
+                          {upload.missionGroupsCreated} mission group{upload.missionGroupsCreated !== 1 ? "s" : ""} created
+                        </span>
                       )}
                       {upload.onnxEnabled && (
                         <span className="text-[10px] font-mono text-accent">ONNX ✓</span>
