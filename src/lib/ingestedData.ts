@@ -97,7 +97,9 @@ function computeMilitaryRelevance(text: string): number {
   for (const term of militaryTerms) {
     if (lower.includes(term)) matches++;
   }
-  return Math.min(1, matches / 5);
+  // Score reaches 1.0 when MILITARY_RELEVANCE_SCALE or more terms are present
+  const MILITARY_RELEVANCE_SCALE = 5;
+  return Math.min(1, matches / MILITARY_RELEVANCE_SCALE);
 }
 
 /** Map priority string to threat level */

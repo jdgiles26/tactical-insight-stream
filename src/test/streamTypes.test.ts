@@ -23,6 +23,19 @@ describe("detectProtocol", () => {
   it("defaults to HTTP for unknown schemes", () => {
     expect(detectProtocol("some-url")).toBe("http");
   });
+
+  it("defaults to HTTP for empty string", () => {
+    expect(detectProtocol("")).toBe("http");
+  });
+
+  it("defaults to HTTP for whitespace-only string", () => {
+    expect(detectProtocol("   ")).toBe("http");
+  });
+
+  it("defaults to HTTP for non-video protocols", () => {
+    expect(detectProtocol("ftp://server/file.dat")).toBe("http");
+    expect(detectProtocol("ws://server/socket")).toBe("http");
+  });
 });
 
 describe("confidenceToPriority", () => {

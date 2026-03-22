@@ -227,7 +227,7 @@ function VideoCell({
           </p>
           <p className="text-[9px] font-mono text-muted-foreground px-2 text-center">
             {source.protocol === "rtsp"
-              ? "RTSP requires a proxy (go2rtc / mediamtx). Provide the proxy HLS endpoint."
+              ? "RTSP requires a proxy (go2rtc / mediamtx). Enter the proxy's HTTP/HLS endpoint URL, or ensure the RTSP proxy serves HTTP at this URL."
               : "Check URL, CORS, and source access."}
           </p>
         </div>

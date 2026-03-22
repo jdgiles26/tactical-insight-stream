@@ -71,6 +71,9 @@ export function scoreToPriorityLevel(
   return "routine";
 }
 
+const MAX_DENSITY_BONUS = 0.15;
+const DENSITY_BONUS_PER_MATCH = 0.03;
+
 /** Score text against a keyword dictionary, returning max-match score */
 function scoreAgainstDictionary(
   text: string,
@@ -92,6 +95,6 @@ function scoreAgainstDictionary(
 
   // Combine max-match with density: more matches increase score
   const avgWeight = weightedSum / totalMatches;
-  const densityBonus = Math.min(0.15, totalMatches * 0.03);
+  const densityBonus = Math.min(MAX_DENSITY_BONUS, totalMatches * DENSITY_BONUS_PER_MATCH);
   return Math.min(1, avgWeight + densityBonus);
 }

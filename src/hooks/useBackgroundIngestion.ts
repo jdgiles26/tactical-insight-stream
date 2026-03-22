@@ -62,7 +62,7 @@ export function useBackgroundIngestion(intervalMs = DEFAULT_INTERVAL_MS) {
           continue;
         }
 
-        cycleIngested += data?.ingested ?? 0;
+        cycleIngested += typeof data?.ingested === "number" ? data.ingested : 0;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`Background ingestion fetch error (${label}):`, msg);

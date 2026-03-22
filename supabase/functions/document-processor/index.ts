@@ -189,7 +189,8 @@ function ruleBasedExtraction(
   text: string,
   filePath: string
 ): Array<{ label: string; confidence: number; detector_type: string; raw_entity?: string }> {
-  const lowerText = (text + " " + filePath).toLowerCase();
+  const combinedText = text + " " + filePath;
+  const lowerText = combinedText.toLowerCase();
   const detections: Array<{ label: string; confidence: number; detector_type: string; raw_entity?: string }> = [];
 
   // Patterns that extract actual entity values from text
@@ -198,16 +199,16 @@ function ruleBasedExtraction(
     label: string;
     confidence: number;
   }> = [
-    { regex: /\b((?:USS|HMS|USNS|MV|MT|SS)\s+[A-Z][a-zA-Z\s]{2,20})\b/g, label: "vessel_name", confidence: 0.88 },
-    { regex: /\b(port\s+(?:of\s+)?[A-Z][a-zA-Z\s]{2,20})\b/gi, label: "port_of_origin", confidence: 0.82 },
+    { regex: /\b((?:USS|HMS|USNS|MV|MT|SS)\s+[A-Z][a-zA-Z]+(?:\s+[a-zA-Z]+){0,3})\b/g, label: "vessel_name", confidence: 0.88 },
+    { regex: /\b(port\s+(?:of\s+)?[A-Z][a-zA-Z]+(?:\s+[a-zA-Z]+){0,3})\b/gi, label: "port_of_origin", confidence: 0.82 },
     { regex: /(-?\d{1,3}\.\d{2,6})[,\s]+(-?\d{1,3}\.\d{2,6})/g, label: "coordinates", confidence: 0.90 },
     { regex: /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4})\b/gi, label: "date_time_group", confidence: 0.85 },
-    { regex: /\b((?:Captain|Admiral|Commander|Lt|Sgt|Col|Gen)\s+[A-Z][a-zA-Z\s]{2,25})\b/g, label: "personnel_identifier", confidence: 0.78 },
+    { regex: /\b((?:Captain|Admiral|Commander|Lt|Sgt|Col|Gen)\s+[A-Z][a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})\b/g, label: "personnel_identifier", confidence: 0.78 },
   ];
 
   // Extract actual entity values using capturing groups
   for (const { regex, label, confidence } of extractionPatterns) {
-    const matches = (text + " " + filePath).matchAll(regex);
+    const matches = combinedText.matchAll(regex);
     for (const match of matches) {
       detections.push({
         label,
