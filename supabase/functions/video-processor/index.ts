@@ -356,6 +356,56 @@ Deno.serve(async (req) => {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // AI Agent Analysis — Scene understanding & intelligence
+    // ──────────────────────────────────────────────────────────────
+    let aiAnalysis: any = null;
+    try {
+      const aiResponse = await supabase.functions.invoke("ai-analysis-agent", {
+        body: {
+          type: "video",
+          content: {
+            url: file_path,
+            detections: maritimeDetections,
+          },
+          metadata: {
+            file_path,
+            data_product_id,
+            model_source: modelSource,
+          },
+        },
+      });
+
+      if (aiResponse.data?.analysis) {
+        aiAnalysis = aiResponse.data.analysis;
+
+        // Update product with AI-enhanced analysis
+        await supabase
+          .from("data_products")
+          .update({
+            priority_score: aiAnalysis.priority_score,
+            priority: aiAnalysis.threat_level,
+            content: {
+              ...((await supabase.from("data_products").select("content").eq("id", data_product_id).single()).data?.content || {}),
+              ai_summary: aiAnalysis.summary,
+              ai_executive_summary: aiAnalysis.executive_summary,
+              ai_scene_description: aiAnalysis.scene_description,
+              ai_entities: aiAnalysis.entities,
+              ai_location_prediction: aiAnalysis.location_prediction,
+              ai_direction_of_travel: aiAnalysis.direction_of_travel,
+              ai_intent_prediction: aiAnalysis.intent_prediction,
+              ai_risk_factors: aiAnalysis.risk_factors,
+              ai_timeline: aiAnalysis.timeline,
+            },
+          })
+          .eq("id", data_product_id);
+
+        console.log(`AI video analysis completed for ${data_product_id}: priority=${aiAnalysis.priority_score}`);
+      }
+    } catch (aiErr) {
+      console.warn("AI video analysis failed (non-fatal):", aiErr);
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // Commander's Intent correlation
     // ──────────────────────────────────────────────────────────────
     const { data: intents } = await supabase

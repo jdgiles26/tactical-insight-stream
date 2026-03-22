@@ -336,6 +336,50 @@ Deno.serve(async (req) => {
     // Sort by confidence descending
     allDetections.sort((a, b) => b.confidence - a.confidence);
 
+    // ──────────────────────────────────────────────────────────────
+    // AI Agent Analysis — Deep content understanding
+    // ──────────────────────────────────────────────────────────────
+    let aiAnalysis: any = null;
+    try {
+      const aiResponse = await supabase.functions.invoke("ai-analysis-agent", {
+        body: {
+          type: "document",
+          content: documentText,
+          metadata: {
+            file_path,
+            detections: allDetections,
+            data_product_id,
+          },
+        },
+      });
+
+      if (aiResponse.data?.analysis) {
+        aiAnalysis = aiResponse.data.analysis;
+
+        // Update product with AI-enhanced scoring
+        await supabase
+          .from("data_products")
+          .update({
+            priority_score: aiAnalysis.priority_score,
+            priority: aiAnalysis.threat_level,
+            content: {
+              ...((await supabase.from("data_products").select("content").eq("id", data_product_id).single()).data?.content || {}),
+              ai_summary: aiAnalysis.summary,
+              ai_executive_summary: aiAnalysis.executive_summary,
+              ai_entities: aiAnalysis.entities,
+              ai_sentiment: aiAnalysis.sentiment,
+              ai_risk_factors: aiAnalysis.risk_factors,
+              ai_timeline: aiAnalysis.timeline,
+            },
+          })
+          .eq("id", data_product_id);
+
+        console.log(`AI analysis completed for ${data_product_id}: priority=${aiAnalysis.priority_score}`);
+      }
+    } catch (aiErr) {
+      console.warn("AI analysis failed (non-fatal):", aiErr);
+    }
+
     // Insert detection results
     for (const det of allDetections) {
       await supabase.from("detection_results").insert({

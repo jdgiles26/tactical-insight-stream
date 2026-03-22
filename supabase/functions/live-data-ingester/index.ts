@@ -59,30 +59,105 @@ Deno.serve(async (req) => {
     const sourceId = body.source_id || null;
     const bounds = body.bounds || null;
     const region = body.region || null;
+    const useCache = body.use_cache !== false; // Cache enabled by default
+    const cacheTtl = body.cache_ttl || 1800; // 30 minutes default
 
     if (action === "list") {
       return jsonResponse({ sources: SOURCES, regions: OPENSKY_REGIONS });
     }
 
+    // Check cache first if enabled
+    if (useCache) {
+      const cacheKey = `${source}:${region || 'default'}`;
+      const cacheResp = await supabase.functions.invoke("cache-manager", {
+        body: { action: "get", source: cacheKey },
+      });
+
+      if (cacheResp.data?.cached) {
+        console.log(`Cache hit for ${cacheKey}, age: ${cacheResp.data.age_seconds}s`);
+        return jsonResponse({
+          ...cacheResp.data.data,
+          cached: true,
+          cache_age_seconds: cacheResp.data.age_seconds,
+        });
+      }
+    }
+
     if (source === "opensky") {
       const resolvedBounds = bounds || (region && OPENSKY_REGIONS[region]) || OPENSKY_REGIONS.caribbean_corridor;
-      return await ingestOpenSky(supabase, sourceId, resolvedBounds);
+      const result = await ingestOpenSky(supabase, sourceId, resolvedBounds);
+
+      // Cache the result
+      if (useCache && result.ok) {
+        const cacheKey = `${source}:${region || 'default'}`;
+        const resultData = await result.json();
+        await supabase.functions.invoke("cache-manager", {
+          body: { action: "set", source: cacheKey, data: resultData, ttl: cacheTtl },
+        });
+        return jsonResponse(resultData);
+      }
+
+      return result;
     }
 
     if (source === "ais") {
-      return await ingestAIS(supabase, sourceId);
+      const result = await ingestAIS(supabase, sourceId);
+
+      if (useCache && result.ok) {
+        const cacheKey = `${source}:default`;
+        const resultData = await result.json();
+        await supabase.functions.invoke("cache-manager", {
+          body: { action: "set", source: cacheKey, data: resultData, ttl: cacheTtl },
+        });
+        return jsonResponse(resultData);
+      }
+
+      return result;
     }
 
     if (source === "nasa_eonet") {
-      return await ingestNasaEONET(supabase, sourceId);
+      const result = await ingestNasaEONET(supabase, sourceId);
+
+      if (useCache && result.ok) {
+        const cacheKey = `${source}:default`;
+        const resultData = await result.json();
+        await supabase.functions.invoke("cache-manager", {
+          body: { action: "set", source: cacheKey, data: resultData, ttl: cacheTtl },
+        });
+        return jsonResponse(resultData);
+      }
+
+      return result;
     }
 
     if (source === "nasa_firms") {
-      return await ingestNasaFIRMS(supabase, sourceId, bounds || (region && OPENSKY_REGIONS[region]));
+      const result = await ingestNasaFIRMS(supabase, sourceId, bounds || (region && OPENSKY_REGIONS[region]));
+
+      if (useCache && result.ok) {
+        const cacheKey = `${source}:${region || 'default'}`;
+        const resultData = await result.json();
+        await supabase.functions.invoke("cache-manager", {
+          body: { action: "set", source: cacheKey, data: resultData, ttl: cacheTtl },
+        });
+        return jsonResponse(resultData);
+      }
+
+      return result;
     }
 
     if (source === "noaa_water") {
-      return await ingestNOAAWater(supabase, sourceId);
+      const result = await ingestNOAAWater(supabase, sourceId);
+
+      if (useCache && result.ok) {
+        const cacheKey = `${source}:default`;
+        const resultData = await result.json();
+        await supabase.functions.invoke("cache-manager", {
+          body: { action: "set", source: cacheKey, data: resultData, ttl: cacheTtl },
+        });
+        return jsonResponse(resultData);
+      }
+
+      return result;
     }
 
     return jsonResponse({ error: "Unknown source. Use: opensky, ais, nasa_eonet, nasa_firms, noaa_water" }, 400);
