@@ -1,52 +1,19 @@
-// VLM (Vision-Language Model) monitoring types
-// TODO: Import these from ../hooks/useVLMMonitor once the hook is created
+/**
+ * Re-exports of VLM monitoring types from the canonical sources.
+ *
+ * Components should import from here rather than reaching into hook/service
+ * internals.  The types are re-exported so that the modal and report
+ * generator work whether or not the consumer has the hook wired up yet.
+ */
 
-export interface BoundingBox {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  label: string;
-  confidence: number;
-}
+export type {
+  VLMAlert,
+  StreamDetectionState,
+} from "@/hooks/useVLMMonitor";
 
-export interface MatchedIntent {
-  term: string;
-  label: string;
-  confidence: number;
-  matchType: 'exact' | 'semantic' | 'related';
-}
+export type {
+  MatchedIntent,
+  VLMAnalysisResult,
+} from "@/lib/huggingfaceService";
 
-export type ThreatLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-
-export interface VLMAlert {
-  id: string;
-  streamId: string;
-  streamName: string;
-  timestamp: number;          // seconds into the video/stream
-  createdAt: string;          // ISO date string
-  threatLevel: ThreatLevel;
-  confidence: number;         // 0-1
-  sceneDescription: string;
-  detections: {
-    label: string;
-    confidence: number;
-    boundingBox?: BoundingBox;
-  }[];
-  matchedIntents: MatchedIntent[];
-  frameBase64?: string;       // data:image/jpeg;base64,... or raw base64
-  depthMapBase64?: string;    // depth map visualization if available
-  objectCount: number;
-  objectTypes: string[];
-}
-
-export interface StreamDetectionState {
-  streamId: string;
-  streamName: string;
-  isMonitoring: boolean;
-  lastAnalysisTime: number;
-  totalFramesAnalyzed: number;
-  totalDetections: number;
-  alertCount: number;
-  monitoringStartedAt?: string;
-}
+export type { Detection } from "@/lib/streamTypes";

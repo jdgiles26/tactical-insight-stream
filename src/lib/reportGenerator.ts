@@ -1,20 +1,22 @@
 import jsPDF from "jspdf";
-import type { VLMAlert, ThreatLevel, StreamDetectionState } from "@/types/vlm";
+import type { VLMAlert, StreamDetectionState } from "@/types/vlm";
 
-// ─────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 // Constants
-// ─────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 
-const PAGE_WIDTH = 210;   // A4 mm
-const PAGE_HEIGHT = 297;
-const MARGIN_LEFT = 20;
-const MARGIN_RIGHT = 20;
-const MARGIN_TOP = 20;
-const MARGIN_BOTTOM = 25;
-const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
-const USABLE_HEIGHT = PAGE_HEIGHT - MARGIN_BOTTOM;
+const PAGE_W = 210; // A4 mm
+const PAGE_H = 297;
+const ML = 20; // margin left
+const MR = 20;
+const MT = 20;
+const MB = 25;
+const CW = PAGE_W - ML - MR; // content width
+const MAX_Y = PAGE_H - MB;
 
-const THREAT_PRIORITY: Record<ThreatLevel, number> = {
+type ThreatLevel = VLMAlert["threatLevel"];
+
+const THREAT_RANK: Record<ThreatLevel, number> = {
   CRITICAL: 4,
   HIGH: 3,
   MEDIUM: 2,
@@ -45,114 +47,106 @@ const RECOMMENDED_ACTIONS: Record<ThreatLevel, string[]> = {
   ],
 };
 
-// ─────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Derived-data helpers (work with the real VLMAlert shape)
+// ---------------------------------------------------------------------------
 
-function getHighestThreat(alerts: VLMAlert[]): ThreatLevel {
+/** Highest threat across all alerts. */
+function highestThreat(alerts: VLMAlert[]): ThreatLevel {
   if (alerts.length === 0) return "LOW";
-  return alerts.reduce((max, a) =>
-    THREAT_PRIORITY[a.threatLevel] > THREAT_PRIORITY[max] ? a.threatLevel : max,
-    "LOW" as ThreatLevel,
+  return alerts.reduce<ThreatLevel>(
+    (max, a) => (THREAT_RANK[a.threatLevel] > THREAT_RANK[max] ? a.threatLevel : max),
+    "LOW",
   );
 }
 
-function getAverageConfidence(alerts: VLMAlert[]): number {
-  if (alerts.length === 0) return 0;
-  return alerts.reduce((sum, a) => sum + a.confidence, 0) / alerts.length;
-}
-
-function getTotalDetections(alerts: VLMAlert[]): number {
-  return alerts.reduce((sum, a) => sum + a.objectCount, 0);
-}
-
-function getMonitoringDuration(analyses: VLMAlert[]): string {
-  if (analyses.length === 0) return "0.0 seconds";
-  const maxTs = Math.max(...analyses.map((a) => a.timestamp));
-  return `${maxTs.toFixed(1)} seconds`;
-}
-
-function getUniqueMatchedIntents(alerts: VLMAlert[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const alert of alerts) {
-    for (const mi of alert.matchedIntents) {
-      const key = mi.term.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        result.push(mi.term);
-      }
+/** Average confidence across all detections in the given alerts. */
+function avgConfidence(alerts: VLMAlert[]): number {
+  let total = 0;
+  let count = 0;
+  for (const a of alerts) {
+    for (const d of a.detections) {
+      total += d.confidence;
+      count++;
     }
   }
-  return result;
+  return count > 0 ? total / count : 0;
 }
 
-function getSuspiciousActivities(alerts: VLMAlert[]): string[] {
-  const activities: string[] = [];
+/** Sum of all individual detections. */
+function totalDetections(alerts: VLMAlert[]): number {
+  return alerts.reduce((s, a) => s + a.detections.length, 0);
+}
+
+/** Unique object type labels across all alerts. */
+function uniqueObjectTypes(alert: VLMAlert): string[] {
+  return [...new Set(alert.detections.map((d) => d.label))];
+}
+
+/** Monitoring duration string. */
+function monitoringDuration(analyses: VLMAlert[]): string {
+  if (analyses.length === 0) return "0.0 seconds";
+  const maxTs = Math.max(...analyses.map((a) => a.timestamp));
+  const minTs = Math.min(...analyses.map((a) => a.timestamp));
+  const dur = (maxTs - minTs) / 1000;
+  return `${dur.toFixed(1)} seconds`;
+}
+
+/** Collect suspicious-activity strings for the bullet list. */
+function suspiciousActivities(alerts: VLMAlert[]): string[] {
+  const items: string[] = [];
   const seen = new Set<string>();
 
-  for (const alert of alerts) {
-    // Extract from matched intents
-    for (const mi of alert.matchedIntents) {
-      const desc = `${mi.term} detected as ${mi.label} (${(mi.confidence * 100).toFixed(0)}% confidence)`;
-      if (!seen.has(mi.term.toLowerCase())) {
-        seen.add(mi.term.toLowerCase());
-        activities.push(desc);
+  for (const a of alerts) {
+    for (const mi of a.matchedIntents) {
+      const key = mi.intentTerm.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        items.push(
+          `${mi.intentTerm} detected as ${mi.detectionLabel} (${(mi.confidence * 100).toFixed(0)}% confidence)`,
+        );
       }
     }
-
-    // Extract notable info from scene descriptions
-    const desc = alert.sceneDescription.toLowerCase();
-    const keywords = [
+    // Pull extra keywords from the scene description
+    const desc = a.sceneDescription.toLowerCase();
+    for (const kw of [
       "collision risk", "dark vessel", "unknown", "suspicious",
       "congested", "loitering", "erratic", "smuggling",
       "unauthorized", "missing ais", "high density",
-    ];
-    for (const kw of keywords) {
+    ]) {
       if (desc.includes(kw) && !seen.has(kw)) {
         seen.add(kw);
-        // Capitalize first letter
-        activities.push(kw.charAt(0).toUpperCase() + kw.slice(1));
+        items.push(kw.charAt(0).toUpperCase() + kw.slice(1));
       }
     }
   }
-
-  return activities;
+  return items;
 }
 
-function formatUTCDate(): string {
-  return new Date().toISOString().replace("T", " ").substring(0, 19) + " UTC";
+function utcNow(): string {
+  return new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
 }
 
-// Check if we need a page break, and add one if so. Returns new yPosition.
+// ---------------------------------------------------------------------------
+// Low-level PDF drawing helpers
+// ---------------------------------------------------------------------------
+
+/** Add a new page if `needed` mm won't fit; return current y. */
 function ensureSpace(doc: jsPDF, y: number, needed: number): number {
-  if (y + needed > USABLE_HEIGHT) {
+  if (y + needed > MAX_Y) {
     doc.addPage();
-    return MARGIN_TOP;
+    return MT;
   }
   return y;
 }
 
-// Wrap text and return lines
-function wrapText(doc: jsPDF, text: string, maxWidth: number): string[] {
-  return doc.splitTextToSize(text, maxWidth);
-}
-
-// ─────────────────────────────────────────────────────────
-// Drawing primitives
-// ─────────────────────────────────────────────────────────
-
 function drawSectionHeader(doc: jsPDF, y: number, text: string): number {
   y = ensureSpace(doc, y, 14);
-  doc.setFontSize(14);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(30, 30, 30);
-  doc.text(text, MARGIN_LEFT, y);
+  doc.setFontSize(14).setFont("helvetica", "bold").setTextColor(30, 30, 30);
+  doc.text(text, ML, y);
   y += 2;
-  // Underline
-  doc.setDrawColor(100, 100, 100);
-  doc.setLineWidth(0.3);
-  doc.line(MARGIN_LEFT, y, MARGIN_LEFT + CONTENT_WIDTH, y);
+  doc.setDrawColor(100, 100, 100).setLineWidth(0.3);
+  doc.line(ML, y, ML + CW, y);
   return y + 6;
 }
 
@@ -163,72 +157,51 @@ function drawTable(
   rows: string[][],
   colWidths: number[],
 ): number {
-  const rowHeight = 8;
-  const headerHeight = 8;
-  const startX = MARGIN_LEFT;
+  const rh = 8;
 
-  y = ensureSpace(doc, y, headerHeight + rowHeight * rows.length + 4);
+  y = ensureSpace(doc, y, rh + rh * rows.length + 4);
 
-  // Header row background
+  // header
   doc.setFillColor(220, 220, 220);
-  doc.rect(startX, y - 5, CONTENT_WIDTH, headerHeight, "F");
-  doc.setDrawColor(150, 150, 150);
-  doc.rect(startX, y - 5, CONTENT_WIDTH, headerHeight, "S");
+  doc.rect(ML, y - 5, CW, rh, "F");
+  doc.setDrawColor(150, 150, 150).rect(ML, y - 5, CW, rh, "S");
+  doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(30, 30, 30);
+  let x = ML + 2;
+  headers.forEach((h, i) => { doc.text(h, x, y); x += colWidths[i]; });
+  y += rh;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(30, 30, 30);
-
-  let xOffset = startX + 2;
-  headers.forEach((h, i) => {
-    doc.text(h, xOffset, y);
-    xOffset += colWidths[i];
-  });
-  y += headerHeight;
-
-  // Data rows
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  rows.forEach((row) => {
-    y = ensureSpace(doc, y, rowHeight);
-
-    // Row border
-    doc.setDrawColor(200, 200, 200);
-    doc.rect(startX, y - 5, CONTENT_WIDTH, rowHeight, "S");
-
-    xOffset = startX + 2;
+  // rows
+  doc.setFont("helvetica", "normal").setFontSize(9);
+  for (const row of rows) {
+    y = ensureSpace(doc, y, rh);
+    doc.setDrawColor(200, 200, 200).rect(ML, y - 5, CW, rh, "S");
+    x = ML + 2;
     row.forEach((cell, i) => {
-      const truncated = cell.length > 50 ? cell.substring(0, 47) + "..." : cell;
-      doc.text(truncated, xOffset, y);
-      xOffset += colWidths[i];
+      const t = cell.length > 55 ? cell.slice(0, 52) + "..." : cell;
+      doc.text(t, x, y);
+      x += colWidths[i];
     });
-    y += rowHeight;
-  });
-
+    y += rh;
+  }
   return y + 2;
 }
 
-function drawBulletList(doc: jsPDF, y: number, items: string[], maxWidth: number): number {
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(30, 30, 30);
-
+function drawBullets(doc: jsPDF, y: number, items: string[]): number {
+  doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(30, 30, 30);
   for (const item of items) {
-    const lines = wrapText(doc, item, maxWidth - 8);
-    const blockHeight = lines.length * 5 + 2;
-    y = ensureSpace(doc, y, blockHeight);
-
-    doc.text("\u2022", MARGIN_LEFT + 2, y);
-    doc.text(lines, MARGIN_LEFT + 8, y);
-    y += lines.length * 5 + 2;
+    const lines: string[] = doc.splitTextToSize(item, CW - 8);
+    const h = lines.length * 5 + 2;
+    y = ensureSpace(doc, y, h);
+    doc.text("\u2022", ML + 2, y);
+    doc.text(lines, ML + 8, y);
+    y += h;
   }
-
   return y;
 }
 
-// ─────────────────────────────────────────────────────────
-// Main export
-// ─────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 export async function generateCommanderReport(
   alerts: VLMAlert[],
@@ -237,279 +210,216 @@ export async function generateCommanderReport(
 ): Promise<void> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-  // Sorted analyses for chronological report
   const sortedAnalyses = [...analysisHistory].sort((a, b) => a.timestamp - b.timestamp);
   const sortedAlerts = [...alerts].sort((a, b) => a.timestamp - b.timestamp);
 
-  // Computed values
-  const highestThreat = getHighestThreat(alerts);
-  const avgConfidence = getAverageConfidence(analysisHistory.length > 0 ? analysisHistory : alerts);
-  const totalDetections = getTotalDetections(analysisHistory.length > 0 ? analysisHistory : alerts);
-  const duration = getMonitoringDuration(analysisHistory.length > 0 ? analysisHistory : alerts);
-  const suspiciousFrames = alerts.length;
-  const suspiciousActivities = getSuspiciousActivities(alerts);
-  const framesAnalyzed = analysisHistory.length || alerts.length;
+  // Use analysisHistory when available, fall back to alerts
+  const pool = sortedAnalyses.length > 0 ? sortedAnalyses : sortedAlerts;
 
-  let y = MARGIN_TOP;
+  const threat = highestThreat(alerts);
+  const confidence = avgConfidence(pool);
+  const detCount = totalDetections(pool);
+  const duration = monitoringDuration(pool);
+  const susActs = suspiciousActivities(alerts);
+  const frameCount = pool.length;
 
-  // ================================================================
-  // PAGE 1: Title & Executive Summary
-  // ================================================================
+  let y = MT;
 
-  // Gray banner header
+  // ===================================================================
+  // PAGE 1 — Title & Executive Summary
+  // ===================================================================
+
+  // Gray banner
   doc.setFillColor(200, 200, 200);
-  doc.rect(0, y - 10, PAGE_WIDTH, 18, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.setTextColor(30, 30, 30);
-  doc.text("COMMANDER'S REPORT", PAGE_WIDTH / 2, y + 2, { align: "center" });
+  doc.rect(0, y - 10, PAGE_W, 18, "F");
+  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(30, 30, 30);
+  doc.text("COMMANDER'S REPORT", PAGE_W / 2, y + 2, { align: "center" });
   y += 16;
 
   // Subtitle
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(12);
-  doc.setTextColor(80, 80, 80);
-  doc.text("Maritime Surveillance Analysis", MARGIN_LEFT, y);
+  doc.setFont("helvetica", "italic").setFontSize(12).setTextColor(80, 80, 80);
+  doc.text("Maritime Surveillance Analysis", ML, y);
   y += 10;
 
   // Metadata
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(30, 30, 30);
-
-  doc.setFont("helvetica", "bold");
-  doc.text("Report Generated:", MARGIN_LEFT, y);
-  doc.setFont("helvetica", "normal");
-  doc.text(formatUTCDate(), MARGIN_LEFT + 38, y);
+  const meta: [string, string][] = [
+    ["Report Generated:", utcNow()],
+    ["Monitoring Duration:", duration],
+    ["Frames Analyzed:", String(frameCount)],
+  ];
+  for (const [label, value] of meta) {
+    doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(30, 30, 30);
+    doc.text(label, ML, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(value, ML + 42, y);
+    y += 6;
+  }
   y += 6;
 
-  doc.setFont("helvetica", "bold");
-  doc.text("Monitoring Duration:", MARGIN_LEFT, y);
-  doc.setFont("helvetica", "normal");
-  doc.text(duration, MARGIN_LEFT + 42, y);
-  y += 6;
-
-  doc.setFont("helvetica", "bold");
-  doc.text("Frames Analyzed:", MARGIN_LEFT, y);
-  doc.setFont("helvetica", "normal");
-  doc.text(String(framesAnalyzed), MARGIN_LEFT + 38, y);
-  y += 12;
-
-  // Executive Summary section
+  // Executive Summary table
   y = drawSectionHeader(doc, y, "EXECUTIVE SUMMARY");
   y += 2;
-
   y = drawTable(
-    doc,
-    y,
+    doc, y,
     ["Metric", "Value"],
     [
-      ["Overall Threat Level", highestThreat],
-      ["Total Objects Detected", String(totalDetections)],
-      ["Suspicious Activity Frames", String(suspiciousFrames)],
-      ["AI Confidence Score", `${(avgConfidence * 100).toFixed(1)}%`],
+      ["Overall Threat Level", threat],
+      ["Total Objects Detected", String(detCount)],
+      ["Suspicious Activity Frames", String(alerts.length)],
+      ["AI Confidence Score", `${(confidence * 100).toFixed(1)}%`],
     ],
-    [CONTENT_WIDTH * 0.55, CONTENT_WIDTH * 0.45],
+    [CW * 0.55, CW * 0.45],
   );
   y += 6;
 
-  // Suspicious Activities Detected
+  // Suspicious activities
   y = drawSectionHeader(doc, y, "SUSPICIOUS ACTIVITIES DETECTED");
   y += 2;
-
-  if (suspiciousActivities.length > 0) {
-    y = drawBulletList(doc, y, suspiciousActivities, CONTENT_WIDTH);
+  if (susActs.length > 0) {
+    y = drawBullets(doc, y, susActs);
   } else {
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text("No suspicious activities detected during monitoring period.", MARGIN_LEFT, y);
+    doc.setFont("helvetica", "italic").setFontSize(10).setTextColor(100, 100, 100);
+    doc.text("No suspicious activities detected during monitoring period.", ML, y);
     y += 6;
   }
 
-  // ================================================================
-  // PAGES 2-3: Detailed Observations
-  // ================================================================
+  // ===================================================================
+  // PAGES 2-3 — Detailed Observations
+  // ===================================================================
 
   doc.addPage();
-  y = MARGIN_TOP;
+  y = MT;
   y = drawSectionHeader(doc, y, "DETAILED OBSERVATIONS");
   y += 4;
 
-  const analysesToReport = sortedAnalyses.length > 0 ? sortedAnalyses : sortedAlerts;
+  for (const a of pool) {
+    const types = uniqueObjectTypes(a).join(", ") || "unknown";
+    const topConf = a.detections.length > 0
+      ? Math.max(...a.detections.map((d) => d.confidence))
+      : 0;
+    const tsLabel = `Timestamp ${((a.timestamp - (pool[0]?.timestamp ?? a.timestamp)) / 1000).toFixed(1)}s`;
+    const metaLine = `Objects: ${a.detections.length} | Types: ${types} | Threat: ${a.threatLevel} | Confidence: ${(topConf * 100).toFixed(1)}%`;
 
-  for (const analysis of analysesToReport) {
-    const tsLabel = `Timestamp ${analysis.timestamp.toFixed(1)}s`;
-    const typesStr = analysis.objectTypes.join(", ") || "unknown";
-    const metaLine = `Objects: ${analysis.objectCount} | Types: ${typesStr} | Threat: ${analysis.threatLevel} | Confidence: ${(analysis.confidence * 100).toFixed(1)}%`;
+    const descLines: string[] = doc.splitTextToSize(a.sceneDescription, CW);
+    const block = 8 + 6 + descLines.length * 4.5 + 8;
+    y = ensureSpace(doc, y, Math.min(block, 60));
 
-    // Estimate space needed
-    const descLines = wrapText(doc, analysis.sceneDescription, CONTENT_WIDTH);
-    const blockHeight = 8 + 6 + descLines.length * 4.5 + 8;
-    y = ensureSpace(doc, y, Math.min(blockHeight, 60));
-
-    // Timestamp header
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(30, 30, 30);
-    doc.text(tsLabel, MARGIN_LEFT, y);
+    doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(30, 30, 30);
+    doc.text(tsLabel, ML, y);
     y += 6;
 
-    // Meta line
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(80, 80, 80);
-    doc.text(metaLine, MARGIN_LEFT, y);
+    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(80, 80, 80);
+    doc.text(metaLine, ML, y);
     y += 6;
 
-    // Scene description
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(30, 30, 30);
-
+    doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(30, 30, 30);
     for (const line of descLines) {
       y = ensureSpace(doc, y, 5);
-      doc.text(line, MARGIN_LEFT, y);
+      doc.text(line, ML, y);
       y += 4.5;
     }
     y += 6;
   }
 
-  // ================================================================
-  // PAGE 4: Evidence Frames
-  // ================================================================
+  // ===================================================================
+  // PAGE 4 — Evidence Frames
+  // ===================================================================
 
   doc.addPage();
-  y = MARGIN_TOP;
+  y = MT;
   y = drawSectionHeader(doc, y, "EVIDENCE FRAMES");
   y += 4;
 
-  // Collect frames from alerts (up to 4)
-  const framesWithData = sortedAlerts
-    .filter((a) => a.frameBase64)
-    .slice(0, 4);
+  const frames = sortedAlerts.filter((a) => a.frameBase64).slice(0, 4);
 
-  if (framesWithData.length > 0) {
-    for (const frame of framesWithData) {
+  if (frames.length > 0) {
+    for (const f of frames) {
       try {
-        // The frame height for the image
-        const imgWidth = CONTENT_WIDTH * 0.7;
-        const imgHeight = imgWidth * 0.5625; // 16:9 aspect
+        const hasDepth = !!f.depthMapBase64;
+        const imgW = hasDepth ? CW * 0.48 : CW * 0.7;
+        const imgH = imgW * 0.5625; // 16:9
 
-        // Check if we also have a depth map to show side by side
-        const hasDepth = !!frame.depthMapBase64;
-        const effectiveWidth = hasDepth ? CONTENT_WIDTH * 0.48 : imgWidth;
-        const effectiveHeight = effectiveWidth * 0.5625;
+        y = ensureSpace(doc, y, imgH + 12);
 
-        y = ensureSpace(doc, y, effectiveHeight + 12);
+        const src = f.frameBase64.startsWith("data:")
+          ? f.frameBase64
+          : `data:image/jpeg;base64,${f.frameBase64}`;
 
-        // Prepare image data
-        const imgData = frame.frameBase64!.startsWith("data:")
-          ? frame.frameBase64!
-          : `data:image/jpeg;base64,${frame.frameBase64!}`;
+        doc.addImage(src, "JPEG", ML, y, imgW, imgH);
 
-        doc.addImage(imgData, "JPEG", MARGIN_LEFT, y, effectiveWidth, effectiveHeight);
-
-        // Depth map alongside if available
         if (hasDepth) {
-          const depthData = frame.depthMapBase64!.startsWith("data:")
-            ? frame.depthMapBase64!
-            : `data:image/jpeg;base64,${frame.depthMapBase64!}`;
-          doc.addImage(
-            depthData,
-            "JPEG",
-            MARGIN_LEFT + effectiveWidth + 4,
-            y,
-            effectiveWidth,
-            effectiveHeight,
-          );
+          const depthSrc = f.depthMapBase64!.startsWith("data:")
+            ? f.depthMapBase64!
+            : `data:image/jpeg;base64,${f.depthMapBase64!}`;
+          doc.addImage(depthSrc, "JPEG", ML + imgW + 4, y, imgW, imgH);
         }
 
-        y += effectiveHeight + 3;
+        y += imgH + 3;
 
-        // Caption
-        doc.setFont("helvetica", "italic");
-        doc.setFontSize(9);
-        doc.setTextColor(100, 100, 100);
-        const caption = `Frame at ${frame.timestamp.toFixed(1)}s - ${frame.threatLevel} threat`;
-        doc.text(caption, MARGIN_LEFT, y);
+        const relTs = ((f.timestamp - (pool[0]?.timestamp ?? f.timestamp)) / 1000).toFixed(1);
+        doc.setFont("helvetica", "italic").setFontSize(9).setTextColor(100, 100, 100);
+        doc.text(`Frame at ${relTs}s - ${f.threatLevel} threat`, ML, y);
         y += 8;
       } catch (err) {
-        // Image embedding can fail with corrupt base64 — skip silently
         console.warn("Failed to embed evidence frame in PDF:", err);
-        doc.setFont("helvetica", "italic");
-        doc.setFontSize(9);
-        doc.setTextColor(150, 100, 100);
-        doc.text(`[Frame at ${frame.timestamp.toFixed(1)}s - image could not be embedded]`, MARGIN_LEFT, y);
+        doc.setFont("helvetica", "italic").setFontSize(9).setTextColor(150, 100, 100);
+        doc.text("[Frame could not be embedded]", ML, y);
         y += 8;
       }
     }
   } else {
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text("No evidence frames captured during this monitoring session.", MARGIN_LEFT, y);
+    doc.setFont("helvetica", "italic").setFontSize(10).setTextColor(100, 100, 100);
+    doc.text("No evidence frames captured during this monitoring session.", ML, y);
     y += 8;
   }
 
-  // ================================================================
-  // PAGE 5: Recommended Actions
-  // ================================================================
+  // ===================================================================
+  // PAGE 5 — Recommended Actions
+  // ===================================================================
 
   doc.addPage();
-  y = MARGIN_TOP;
+  y = MT;
   y = drawSectionHeader(doc, y, "RECOMMENDED ACTIONS");
   y += 4;
+  y = drawBullets(doc, y, RECOMMENDED_ACTIONS[threat] ?? RECOMMENDED_ACTIONS.LOW);
 
-  const actions = RECOMMENDED_ACTIONS[highestThreat] ?? RECOMMENDED_ACTIONS.LOW;
-  y = drawBulletList(doc, y, actions, CONTENT_WIDTH);
-
-  // Additional context based on stream detections
-  y += 8;
+  // Stream summary
   if (streamDetections.size > 0) {
+    y += 8;
     y = ensureSpace(doc, y, 20);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(80, 80, 80);
-    doc.text("Monitored Streams Summary:", MARGIN_LEFT, y);
+    doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(80, 80, 80);
+    doc.text("Monitored Streams Summary:", ML, y);
     y += 6;
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(60, 60, 60);
-
+    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(60, 60, 60);
     streamDetections.forEach((state) => {
       y = ensureSpace(doc, y, 6);
       doc.text(
-        `\u2022 ${state.streamName}: ${state.totalFramesAnalyzed} frames, ${state.totalDetections} detections, ${state.alertCount} alerts`,
-        MARGIN_LEFT + 2,
+        `\u2022 ${state.streamLabel}: ${state.detections.length} detections, ` +
+        `threat ${state.threatLevel}, ${state.matchedIntents.length} intent matches`,
+        ML + 2,
         y,
       );
       y += 5;
     });
   }
 
-  // Footer on last page
+  // Footer
   y = ensureSpace(doc, y, 20);
   y += 10;
-  doc.setDrawColor(180, 180, 180);
-  doc.setLineWidth(0.2);
-  doc.line(MARGIN_LEFT, y, MARGIN_LEFT + CONTENT_WIDTH, y);
+  doc.setDrawColor(180, 180, 180).setLineWidth(0.2);
+  doc.line(ML, y, ML + CW, y);
   y += 5;
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(8);
-  doc.setTextColor(140, 140, 140);
+  doc.setFont("helvetica", "italic").setFontSize(8).setTextColor(140, 140, 140);
   doc.text(
-    `Generated by Tactical Insight Stream \u2022 ${formatUTCDate()} \u2022 Classification: UNCLASSIFIED`,
-    PAGE_WIDTH / 2,
-    y,
-    { align: "center" },
+    `Generated by Tactical Insight Stream \u2022 ${utcNow()} \u2022 Classification: UNCLASSIFIED`,
+    PAGE_W / 2, y, { align: "center" },
   );
 
-  // ================================================================
-  // Save / Download
-  // ================================================================
+  // ===================================================================
+  // Download
+  // ===================================================================
 
-  const dateStr = new Date().toISOString().substring(0, 10);
+  const dateStr = new Date().toISOString().slice(0, 10);
   doc.save(`commanders-report-${dateStr}.pdf`);
 }
