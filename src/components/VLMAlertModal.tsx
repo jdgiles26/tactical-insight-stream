@@ -118,7 +118,7 @@ export default function VLMAlertModal({
   onDismiss,
   streamDetections,
 }: VLMAlertModalProps) {
-  // ---- Escape key -------------------------------------------------------
+  // ---- Print Report + dismiss -------------------------------------------
   const handlePrintReport = useCallback(async () => {
     try {
       await generateCommanderReport(allAlerts, analysisHistory, streamDetections);
@@ -128,14 +128,15 @@ export default function VLMAlertModal({
     onDismiss();
   }, [allAlerts, analysisHistory, streamDetections, onDismiss]);
 
+  // ---- Escape key → dismiss only (no PDF) --------------------------------
   useEffect(() => {
     if (!alert) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handlePrintReport();
+      if (e.key === "Escape") onDismiss();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [alert, handlePrintReport]);
+  }, [alert, onDismiss]);
 
   // ---- Lock body scroll -------------------------------------------------
   useEffect(() => {
@@ -185,7 +186,7 @@ export default function VLMAlertModal({
       {/* ── Backdrop ── */}
       <div
         className="vlm-backdrop fixed inset-0 z-[100] bg-red-900/80"
-        onClick={handlePrintReport}
+        onClick={onDismiss}
       />
 
       {/* ── Modal card ── */}
