@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Grid3X3, Play, Pause, Maximize2, Volume2, VolumeX, Plus, X, Tv, AlertTriangle } from "lucide-react";
+import { Grid3X3, Play, Pause, Maximize2, Volume2, VolumeX, Plus, X, Tv, AlertTriangle, Eye } from "lucide-react";
+import { useVLMMonitor, type VLMAlert, type StreamDetectionState } from "@/hooks/useVLMMonitor";
+import VLMAlertModal from "@/components/VLMAlertModal";
 import type { StreamSource, StreamProtocol, StreamStatus } from "@/lib/streamTypes";
 import { detectProtocol } from "@/lib/streamTypes";
 
@@ -60,16 +62,90 @@ function VideoCell({
   source,
   index,
   onRemove,
+  streamDetections,
+  registerVideoRef,
 }: {
   source: StreamSource | null;
   index: number;
   onRemove: () => void;
+  streamDetections: Map<string, StreamDetectionState>;
+  registerVideoRef: (streamId: string, label: string, el: HTMLVideoElement | null) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [muted, setMuted] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [status, setStatus] = useState<StreamStatus>("inactive");
+
+  // Register video element with VLM monitor when it mounts
+  const videoRefCallback = useCallback(
+    (el: HTMLVideoElement | null) => {
+      videoRef.current = el;
+      if (source) {
+        registerVideoRef(source.id, source.label, el);
+      }
+    },
+    [source, registerVideoRef],
+  );
+
+  // Draw bounding boxes on canvas overlay whenever detections update
+  const detectionState = source ? streamDetections.get(source.id) : undefined;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Match canvas size to video display size
+    const rect = video.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+
+    // Clear previous drawings
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!detectionState?.detections?.length) return;
+
+    detectionState.detections.forEach(det => {
+      const { x, y, w, h } = det.bbox; // normalized 0-1
+      const dx = x * canvas.width;
+      const dy = y * canvas.height;
+      const dw = w * canvas.width;
+      const dh = h * canvas.height;
+
+      // Determine color based on whether this matches an intent
+      const isIntentMatch = detectionState.matchedIntents.some(m => m.detectionLabel === det.label);
+      const color = isIntentMatch ? '#ef4444' : '#22c55e'; // red for intent match, green for general
+
+      // Draw bounding box
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(dx, dy, dw, dh);
+
+      // Draw label background
+      const labelText = `${det.label} ${(det.confidence * 100).toFixed(0)}%`;
+      ctx.font = '12px monospace';
+      const metrics = ctx.measureText(labelText);
+      ctx.fillStyle = color;
+      ctx.fillRect(dx, dy - 18, metrics.width + 8, 18);
+
+      // Draw label text
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(labelText, dx + 4, dy - 4);
+
+      // If intent match, draw dashed alert border
+      if (isIntentMatch) {
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([5, 3]);
+        ctx.strokeRect(dx - 2, dy - 2, dw + 4, dh + 4);
+        ctx.setLineDash([]);
+      }
+    });
+  }, [detectionState]);
 
   // Connect to stream whenever source changes
   useEffect(() => {
@@ -209,14 +285,40 @@ function VideoCell({
 
   return (
     <div className="relative group border border-border rounded-md overflow-hidden bg-background aspect-video">
+      <div className="relative w-full h-full">
       <video
-        ref={videoRef}
+        ref={videoRefCallback}
         className="w-full h-full object-cover"
         autoPlay
         muted
         loop
         playsInline
       />
+      {/* Bounding box canvas overlay */}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        style={{ zIndex: 5 }}
+      />
+      {/* Depth map thumbnail */}
+      {detectionState?.depthMapBase64 && (
+        <div className="absolute bottom-8 right-2 w-24 h-16 rounded border border-cyan-500/50 overflow-hidden opacity-70 hover:opacity-100 transition-opacity" style={{ zIndex: 6 }}>
+          <img
+            src={detectionState.depthMapBase64.startsWith('data:') ? detectionState.depthMapBase64 : `data:image/png;base64,${detectionState.depthMapBase64}`}
+            alt="Depth"
+            className="w-full h-full object-cover"
+          />
+          <span className="absolute bottom-0 left-0 text-[8px] bg-black/60 text-cyan-400 px-1">DEPTH</span>
+        </div>
+      )}
+      {/* AI Monitoring indicator */}
+      {detectionState?.isAnalyzing && (
+        <div className="absolute top-1 right-1 flex items-center gap-1 bg-black/60 rounded px-1.5 py-0.5" style={{ zIndex: 6 }}>
+          <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-[8px] font-mono text-green-400">AI</span>
+        </div>
+      )}
+      </div>
 
       {/* Error overlay */}
       {status === "error" && (
@@ -277,6 +379,28 @@ export default function MediaPlayerPage() {
   const [newLabel, setNewLabel] = useState("");
   const [newUrl, setNewUrl] = useState("");
   const [newProtocol, setNewProtocol] = useState<StreamProtocol>("hls");
+
+  // VLM monitoring integration
+  const {
+    streamDetections,
+    alerts,
+    acknowledgeAlert,
+    analysisHistory,
+    isMonitoring,
+    toggleMonitoring,
+    registerVideoRef,
+  } = useVLMMonitor({ intervalMs: 10000, enabled: true });
+
+  // Alert modal state
+  const [activeAlert, setActiveAlert] = useState<VLMAlert | null>(null);
+
+  // When a new alert comes in, show the modal
+  useEffect(() => {
+    const unacknowledged = alerts.filter(a => !a.acknowledged);
+    if (unacknowledged.length > 0 && !activeAlert) {
+      setActiveAlert(unacknowledged[0]);
+    }
+  }, [alerts, activeAlert]);
 
   const layoutConfig = LAYOUT_OPTIONS.find((l) => l.value === layout) || LAYOUT_OPTIONS[2];
 
@@ -370,6 +494,23 @@ export default function MediaPlayerPage() {
           <Button size="sm" variant="outline" onClick={() => setShowAddForm(!showAddForm)}>
             <Plus className="h-3 w-3 mr-1" /> Add Stream
           </Button>
+
+          <Button
+            variant={isMonitoring ? "destructive" : "outline"}
+            size="sm"
+            onClick={toggleMonitoring}
+            className="gap-2"
+          >
+            {isMonitoring && <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />}
+            <Eye className="h-4 w-4" />
+            {isMonitoring ? 'AI Monitoring Active' : 'Start AI Monitoring'}
+          </Button>
+
+          {alerts.filter(a => !a.acknowledged).length > 0 && (
+            <Badge variant="destructive" className="animate-pulse">
+              {alerts.filter(a => !a.acknowledged).length} Alerts
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -436,9 +577,30 @@ export default function MediaPlayerPage() {
         }}
       >
         {sources.slice(0, layoutConfig.count).map((source, i) => (
-          <VideoCell key={i} source={source} index={i} onRemove={() => removeSource(i)} />
+          <VideoCell
+            key={i}
+            source={source}
+            index={i}
+            onRemove={() => removeSource(i)}
+            streamDetections={streamDetections}
+            registerVideoRef={registerVideoRef}
+          />
         ))}
       </div>
+
+      {/* VLM Alert Modal */}
+      <VLMAlertModal
+        alert={activeAlert}
+        allAlerts={alerts}
+        analysisHistory={analysisHistory}
+        streamDetections={streamDetections}
+        onDismiss={() => {
+          if (activeAlert) {
+            acknowledgeAlert(activeAlert.id);
+          }
+          setActiveAlert(null);
+        }}
+      />
     </div>
   );
 }
