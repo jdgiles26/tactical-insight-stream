@@ -33,6 +33,8 @@ const VIDEO_MODEL = "YOLOv8 best-boat.onnx (maritime)";
 
 export default function UploadPage() {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
+  const [uploadLat, setUploadLat] = useState("");
+  const [uploadLng, setUploadLng] = useState("");
 
   const updateUpload = useCallback((idx: number, updates: Partial<UploadItem>) => {
     setUploads((prev) => prev.map((u, i) => (i === idx ? { ...u, ...updates } : u)));
@@ -62,6 +64,7 @@ export default function UploadPage() {
           priority_score: priorityScores.medium,
           confidence_score: 0.85,
           content: { file_size: file.size, mime_type: file.type, processed_locally: true },
+          ...(uploadLat && uploadLng ? { latitude: parseFloat(uploadLat), longitude: parseFloat(uploadLng) } : {}),
         })
         .select()
         .single();
@@ -155,6 +158,51 @@ export default function UploadPage() {
         }
       }
 
+      // Step 5: Check for commander's intent matches
+      const allDetections = [
+        ...(docResult ? docResult.detection_details.slice(0, 10) : []),
+        ...(vidResult ? vidResult.detection_details : []),
+      ];
+      try {
+        const { data: intents } = await supabase
+          .from("commander_intents").select("*").eq("is_active", true);
+        if (intents?.length) {
+          for (const intent of intents) {
+            const term = (intent as any).term?.toLowerCase();
+            if (!term) continue;
+            for (const det of allDetections) {
+              const label = det.label.toLowerCase();
+              if (label.includes(term) || term.includes(label)) {
+                await supabase.from("correlation_alerts").insert({
+                  intent_id: (intent as any).id,
+                  data_product_id: product.id,
+                  match_type: label === term ? 'exact' : 'related',
+                  match_score: det.confidence || 0.8,
+                  matched_term: (intent as any).term,
+                  matched_label: det.label,
+                  acknowledged: false,
+                } as any).catch(() => {});
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[UploadPage] Correlation matching failed:', e);
+      }
+
+      // Step 6: Create pipeline event for the upload
+      await supabase.from("event_bus").insert({
+        topic: 'mdg.ingestion',
+        partition_key: sourceType,
+        payload: { title: file.name, source_type: sourceType, product_id: product.id, detections: result.detections },
+        status: 'completed',
+        stage: 'ingestion',
+        data_product_id: product.id,
+        retry_count: 0,
+        max_retries: 3,
+        metadata: {},
+      } as any).catch(() => {});
+
       updateUpload(idx, {
         status: "done",
         progress: 100,
@@ -245,6 +293,33 @@ export default function UploadPage() {
           <span className="text-foreground font-medium">Emergency triggers:</span>
           <span>OPORD · Mayday · Disaster · Illegal Activity · Injury · National Alert</span>
         </div>
+      </div>
+
+      {/* Optional Geo Coordinates */}
+      <div className="rounded-lg border border-border bg-card px-4 py-3 flex flex-wrap gap-4 items-end">
+        <div>
+          <label className="mb-1 block text-xs font-mono uppercase text-muted-foreground">Latitude (optional)</label>
+          <input
+            type="number"
+            step="any"
+            value={uploadLat}
+            onChange={e => setUploadLat(e.target.value)}
+            placeholder="e.g. 34.0522"
+            className="w-40 rounded-md border border-border bg-secondary px-3 py-1.5 text-sm text-foreground"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-mono uppercase text-muted-foreground">Longitude (optional)</label>
+          <input
+            type="number"
+            step="any"
+            value={uploadLng}
+            onChange={e => setUploadLng(e.target.value)}
+            placeholder="e.g. -118.2437"
+            className="w-40 rounded-md border border-border bg-secondary px-3 py-1.5 text-sm text-foreground"
+          />
+        </div>
+        <span className="text-xs text-muted-foreground font-mono">Attach geo-coordinates for map correlation</span>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

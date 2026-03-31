@@ -19,14 +19,20 @@ export function useCorrelationAlerts() {
   return useQuery({
     queryKey: ["correlation_alerts"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("correlation_alerts")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      return data as unknown as CorrelationAlert[];
+      try {
+        const { data, error } = await supabase
+          .from("correlation_alerts")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(100);
+        if (error) { console.warn('[useCorrelationAlerts]', error.message); return []; }
+        return data as unknown as CorrelationAlert[];
+      } catch (e) {
+        console.warn('[useCorrelationAlerts] Failed:', e);
+        return [];
+      }
     },
+    refetchInterval: 5000,
   });
 }
 

@@ -40,12 +40,17 @@ export function useDataSources() {
   return useQuery({
     queryKey: ["data_sources"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("data_sources")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as unknown as DataSource[];
+      try {
+        const { data, error } = await supabase
+          .from("data_sources")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (error) { console.warn('[useDataSources]', error.message); return []; }
+        return data as unknown as DataSource[];
+      } catch (e) {
+        console.warn('[useDataSources] Failed:', e);
+        return [];
+      }
     },
   });
 }

@@ -44,16 +44,29 @@ export interface PipelineStage {
   timeout_seconds: number;
 }
 
+const DEFAULT_STAGES: PipelineStage[] = [
+  { id: '1', name: 'ingestion', display_name: 'Ingestion', stage_order: 1, topic: 'mdg.ingestion', is_active: true, timeout_seconds: 300 },
+  { id: '2', name: 'processing', display_name: 'Processing', stage_order: 2, topic: 'mdg.processing', is_active: true, timeout_seconds: 600 },
+  { id: '3', name: 'enrichment', display_name: 'Enrichment', stage_order: 3, topic: 'mdg.enrichment', is_active: true, timeout_seconds: 300 },
+  { id: '4', name: 'correlation', display_name: 'Correlation', stage_order: 4, topic: 'mdg.correlation', is_active: true, timeout_seconds: 300 },
+  { id: '5', name: 'dissemination', display_name: 'Dissemination', stage_order: 5, topic: 'mdg.dissemination', is_active: true, timeout_seconds: 300 },
+];
+
 export function usePipelineStages() {
   return useQuery({
     queryKey: ["pipeline_stages"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pipeline_stages")
-        .select("*")
-        .order("stage_order", { ascending: true });
-      if (error) throw error;
-      return data as unknown as PipelineStage[];
+      try {
+        const { data, error } = await supabase
+          .from("pipeline_stages")
+          .select("*")
+          .order("stage_order", { ascending: true });
+        if (error) { console.warn('[usePipelineStages]', error.message); return DEFAULT_STAGES; }
+        return (data as unknown as PipelineStage[]).length ? data as unknown as PipelineStage[] : DEFAULT_STAGES;
+      } catch (e) {
+        console.warn('[usePipelineStages] Failed:', e);
+        return DEFAULT_STAGES;
+      }
     },
   });
 }
@@ -62,15 +75,20 @@ export function useEventBusItems(stage?: string) {
   return useQuery({
     queryKey: ["event_bus", stage],
     queryFn: async () => {
-      let query = supabase
-        .from("event_bus")
-        .select("*")
-        .order("offset_id", { ascending: false })
-        .limit(200);
-      if (stage) query = query.eq("stage", stage);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as unknown as EventBusItem[];
+      try {
+        let query = supabase
+          .from("event_bus")
+          .select("*")
+          .order("offset_id", { ascending: false })
+          .limit(200);
+        if (stage) query = query.eq("stage", stage);
+        const { data, error } = await query;
+        if (error) { console.warn('[useEventBusItems]', error.message); return []; }
+        return data as unknown as EventBusItem[];
+      } catch (e) {
+        console.warn('[useEventBusItems] Failed:', e);
+        return [];
+      }
     },
     refetchInterval: 3000,
   });
@@ -80,13 +98,18 @@ export function useDeadLetterQueue() {
   return useQuery({
     queryKey: ["dead_letter_queue"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("dead_letter_queue")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (error) throw error;
-      return data as unknown as DeadLetterItem[];
+      try {
+        const { data, error } = await supabase
+          .from("dead_letter_queue")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (error) { console.warn('[useDeadLetterQueue]', error.message); return []; }
+        return data as unknown as DeadLetterItem[];
+      } catch (e) {
+        console.warn('[useDeadLetterQueue] Failed:', e);
+        return [];
+      }
     },
     refetchInterval: 5000,
   });
@@ -96,23 +119,28 @@ export function useEventBusMetrics() {
   return useQuery({
     queryKey: ["event_bus_metrics"],
     queryFn: async () => {
-      const { data: allEvents, error } = await supabase
-        .from("event_bus")
-        .select("stage, status");
-      if (error) throw error;
+      try {
+        const { data: allEvents, error } = await supabase
+          .from("event_bus")
+          .select("stage, status");
+        if (error) { console.warn('[useEventBusMetrics]', error.message); return { stageMetrics: {}, deadLetterCount: 0 }; }
 
-      const stageMetrics: Record<string, Record<string, number>> = {};
-      for (const e of (allEvents || [])) {
-        const ev = e as unknown as { stage: string; status: string };
-        if (!stageMetrics[ev.stage]) stageMetrics[ev.stage] = {};
-        stageMetrics[ev.stage][ev.status] = (stageMetrics[ev.stage][ev.status] || 0) + 1;
+        const stageMetrics: Record<string, Record<string, number>> = {};
+        for (const e of (allEvents || [])) {
+          const ev = e as unknown as { stage: string; status: string };
+          if (!stageMetrics[ev.stage]) stageMetrics[ev.stage] = {};
+          stageMetrics[ev.stage][ev.status] = (stageMetrics[ev.stage][ev.status] || 0) + 1;
+        }
+
+        const { count: dlqCount } = await supabase
+          .from("dead_letter_queue")
+          .select("*", { count: "exact", head: true });
+
+        return { stageMetrics, deadLetterCount: dlqCount || 0 };
+      } catch (e) {
+        console.warn('[useEventBusMetrics] Failed:', e);
+        return { stageMetrics: {}, deadLetterCount: 0 };
       }
-
-      const { count: dlqCount } = await supabase
-        .from("dead_letter_queue")
-        .select("*", { count: "exact", head: true });
-
-      return { stageMetrics, deadLetterCount: dlqCount || 0 };
     },
     refetchInterval: 3000,
   });

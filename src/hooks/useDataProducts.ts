@@ -9,13 +9,18 @@ export function useDataProducts() {
   return useQuery({
     queryKey: ["data_products"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("data_products")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return data as DataProduct[];
+      try {
+        const { data, error } = await supabase
+          .from("data_products")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(500);
+        if (error) { console.warn('[useDataProducts]', error.message); return []; }
+        return data as DataProduct[];
+      } catch (e) {
+        console.warn('[useDataProducts] Failed:', e);
+        return [];
+      }
     },
   });
 }
@@ -24,15 +29,20 @@ export function useAllGeoProducts() {
   return useQuery({
     queryKey: ["data_products_geo"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("data_products")
-        .select("*")
-        .not("latitude", "is", null)
-        .not("longitude", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(1000);
-      if (error) throw error;
-      return data as DataProduct[];
+      try {
+        const { data, error } = await supabase
+          .from("data_products")
+          .select("*")
+          .not("latitude", "is", null)
+          .not("longitude", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(1000);
+        if (error) { console.warn('[useAllGeoProducts]', error.message); return []; }
+        return data as DataProduct[];
+      } catch (e) {
+        console.warn('[useAllGeoProducts] Failed:', e);
+        return [];
+      }
     },
     refetchInterval: 15 * 60 * 1000, // auto-refresh every 15 min
   });
@@ -50,8 +60,25 @@ export function useIngestData() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["data_products"] });
+      queryClient.invalidateQueries({ queryKey: ["data_products_geo"] });
+      // Create pipeline event
+      if (data?.id) {
+        supabase.from("event_bus").insert({
+          topic: 'mdg.ingestion',
+          partition_key: data.source_type || 'default',
+          payload: { title: data.title, source_type: data.source_type, product_id: data.id },
+          status: 'completed',
+          stage: 'ingestion',
+          data_product_id: data.id,
+          retry_count: 0,
+          max_retries: 3,
+          metadata: {},
+        } as any).then(({ error }) => {
+          if (error) console.warn('[EventBus]', error.message);
+        });
+      }
     },
   });
 }
@@ -63,7 +90,7 @@ export function useDataProductStats() {
       const { data, error } = await supabase
         .from("data_products")
         .select("status, priority, source_type");
-      if (error) throw error;
+      if (error) { console.warn('[useDataProductStats]', error.message); return { total: 0, byStatus: {}, byPriority: {}, bySource: {} }; }
       
       const total = data.length;
       const byStatus: Record<string, number> = {};

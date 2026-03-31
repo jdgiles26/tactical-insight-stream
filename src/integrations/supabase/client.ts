@@ -1,8 +1,15 @@
-// Supabase client — uses local in-memory store as a drop-in replacement
-// when the Supabase backend tables are not available.
-import { localSupabase } from '@/lib/localStore';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from './types';
 
-// Export the local store as the supabase client.
-// All existing code that imports { supabase } from this module
-// will use the local in-memory store seamlessly.
-export const supabase = localSupabase as any;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY || '';
+
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+  realtime: {
+    params: { eventsPerSecond: 10 },
+  },
+});
