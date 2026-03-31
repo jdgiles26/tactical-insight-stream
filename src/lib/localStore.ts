@@ -372,6 +372,10 @@ class InsertBuilder {
   then(resolve: any, reject?: any) {
     return this.qb.then(resolve, reject);
   }
+
+  catch(reject: any) {
+    return this.then(undefined, reject);
+  }
 }
 
 class UpdateBuilder {
@@ -389,6 +393,7 @@ class UpdateBuilder {
   select(cols?: string) { this.qb.select(cols); return this; }
   single() { this.qb.single(); return this; }
   then(resolve: any, reject?: any) { return this.qb.then(resolve, reject); }
+  catch(reject: any) { return this.then(undefined, reject); }
 }
 
 class DeleteBuilder {
@@ -403,6 +408,7 @@ class DeleteBuilder {
   neq(col: string, val: any) { this.qb.neq(col, val); return this; }
   in(col: string, vals: any[]) { this.qb.in(col, vals); return this; }
   then(resolve: any, reject?: any) { return this.qb.then(resolve, reject); }
+  catch(reject: any) { return this.then(undefined, reject); }
 }
 
 class UpsertBuilder {
@@ -417,6 +423,7 @@ class UpsertBuilder {
   select(cols?: string) { this.qb.select(cols); return this; }
   single() { this.qb.single(); return this; }
   then(resolve: any, reject?: any) { return this.qb.then(resolve, reject); }
+  catch(reject: any) { return this.then(undefined, reject); }
 }
 
 // ── Table proxy ──────────────────────────────────────────────────
