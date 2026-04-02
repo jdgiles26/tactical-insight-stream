@@ -4,22 +4,8 @@ import { useMemo } from "react";
 import { AlertTriangle, ArrowUp, ArrowDown, Clock, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-
-const LEVEL_ORDER = ["MINIMAL", "GUARDED", "ELEVATED", "HIGH", "SEVERE"];
-const LEVEL_COLOR: Record<string, string> = {
-  MINIMAL: "text-emerald-400",
-  GUARDED: "text-sky-400",
-  ELEVATED: "text-amber-400",
-  HIGH: "text-orange-400",
-  SEVERE: "text-destructive",
-};
-const LEVEL_BG: Record<string, string> = {
-  MINIMAL: "bg-emerald-500/10 border-emerald-500/30",
-  GUARDED: "bg-sky-500/10 border-sky-500/30",
-  ELEVATED: "bg-amber-500/10 border-amber-500/30",
-  HIGH: "bg-orange-500/10 border-orange-500/30",
-  SEVERE: "bg-destructive/10 border-destructive/30",
-};
+import { LEVEL_ORDER, THREAT_CONFIG } from "@/lib/stormAssessment";
+import type { ThreatLevel } from "@/lib/stormAssessment";
 
 interface EscalationEvent {
   from: string;
@@ -27,6 +13,7 @@ interface EscalationEvent {
   direction: "up" | "down";
   timestamp: string;
   score: number;
+  prevScore: number;
   details: string[];
   sensorCount: number;
   criticalCount: number;
@@ -43,23 +30,28 @@ export default function StormEscalationHistory() {
       const prev = history[i - 1];
       const curr = history[i];
       if (prev.threat_level !== curr.threat_level) {
-        const prevIdx = LEVEL_ORDER.indexOf(prev.threat_level);
-        const currIdx = LEVEL_ORDER.indexOf(curr.threat_level);
+        const prevIdx = LEVEL_ORDER.indexOf(prev.threat_level as ThreatLevel);
+        const currIdx = LEVEL_ORDER.indexOf(curr.threat_level as ThreatLevel);
+        if (prevIdx === -1 || currIdx === -1) continue; // skip unknown levels
         result.push({
           from: prev.threat_level,
           to: curr.threat_level,
           direction: currIdx > prevIdx ? "up" : "down",
           timestamp: curr.recorded_at,
           score: curr.score,
-          details: curr.details ?? [],
+          prevScore: prev.score,
+          details: Array.isArray(curr.details) ? curr.details : [],
           sensorCount: curr.sensor_count,
           criticalCount: curr.critical_count,
           highCount: curr.high_count,
         });
       }
     }
-    return result.reverse(); // newest first
+    return result.reverse();
   }, [history]);
+
+  const escalationCount = useMemo(() => events.filter((e) => e.direction === "up").length, [events]);
+  const deescalationCount = useMemo(() => events.filter((e) => e.direction === "down").length, [events]);
 
   if (isLoading) {
     return (
@@ -76,9 +68,21 @@ export default function StormEscalationHistory() {
         <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
           Storm Threat Escalation History (7 days)
         </span>
-        <Badge variant="secondary" className="ml-auto text-[10px]">
-          {events.length} event{events.length !== 1 ? "s" : ""}
-        </Badge>
+        <div className="ml-auto flex items-center gap-2">
+          {escalationCount > 0 && (
+            <Badge variant="destructive" className="text-[10px]">
+              {escalationCount} escalation{escalationCount !== 1 ? "s" : ""}
+            </Badge>
+          )}
+          {deescalationCount > 0 && (
+            <Badge variant="secondary" className="text-[10px]">
+              {deescalationCount} de-escalation{deescalationCount !== 1 ? "s" : ""}
+            </Badge>
+          )}
+          {events.length === 0 && (
+            <Badge variant="secondary" className="text-[10px]">0 events</Badge>
+          )}
+        </div>
       </div>
 
       {events.length === 0 ? (
@@ -88,82 +92,84 @@ export default function StormEscalationHistory() {
           <p className="text-xs">Threat level changes will appear here as sensor data is collected</p>
         </div>
       ) : (
-        <div className="divide-y divide-border">
-          {events.map((evt, i) => (
-            <div
-              key={i}
-              className={cn(
-                "flex items-start gap-4 px-4 py-3",
-                evt.direction === "up" ? "bg-destructive/5" : "bg-emerald-500/5"
-              )}
-            >
-              {/* Icon */}
-              <div className={cn(
-                "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border",
-                evt.direction === "up"
-                  ? "border-destructive/40 bg-destructive/10"
-                  : "border-emerald-500/40 bg-emerald-500/10"
-              )}>
-                {evt.direction === "up" ? (
-                  <ArrowUp className="h-4 w-4 text-destructive" />
-                ) : (
-                  <ArrowDown className="h-4 w-4 text-emerald-400" />
+        <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
+          {events.map((evt, i) => {
+            const fromCfg = THREAT_CONFIG[evt.from as ThreatLevel];
+            const toCfg = THREAT_CONFIG[evt.to as ThreatLevel];
+            return (
+              <div
+                key={`${evt.timestamp}-${i}`}
+                className={cn(
+                  "flex items-start gap-4 px-4 py-3",
+                  evt.direction === "up" ? "bg-destructive/5" : "bg-emerald-500/5"
                 )}
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={cn("font-bold text-sm", LEVEL_COLOR[evt.from])}>
-                    {evt.from}
-                  </span>
-                  <span className="text-muted-foreground text-xs">→</span>
-                  <span className={cn("font-bold text-sm", LEVEL_COLOR[evt.to])}>
-                    {evt.to}
-                  </span>
-                  <Badge
-                    variant={evt.direction === "up" ? "destructive" : "secondary"}
-                    className="text-[9px] px-1.5 py-0"
-                  >
-                    {evt.direction === "up" ? "ESCALATION" : "DE-ESCALATION"}
-                  </Badge>
-                  <span className="text-xs font-mono text-muted-foreground ml-auto">
-                    Score: {evt.score}/100
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                  <Clock className="h-3 w-3 shrink-0" />
-                  <span>{format(new Date(evt.timestamp), "MMM d, yyyy HH:mm:ss")}</span>
-                  <span>•</span>
-                  <span>{evt.sensorCount} stations</span>
-                  {evt.criticalCount > 0 && (
-                    <>
-                      <span>•</span>
-                      <span className="text-destructive">{evt.criticalCount} critical</span>
-                    </>
-                  )}
-                  {evt.highCount > 0 && (
-                    <>
-                      <span>•</span>
-                      <span className="text-warning">{evt.highCount} high</span>
-                    </>
+              >
+                <div className={cn(
+                  "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border",
+                  evt.direction === "up"
+                    ? "border-destructive/40 bg-destructive/10"
+                    : "border-emerald-500/40 bg-emerald-500/10"
+                )}>
+                  {evt.direction === "up" ? (
+                    <ArrowUp className="h-4 w-4 text-destructive" />
+                  ) : (
+                    <ArrowDown className="h-4 w-4 text-emerald-400" />
                   )}
                 </div>
 
-                {evt.details.length > 0 && (
-                  <div className="space-y-0.5 mt-1">
-                    {evt.details.map((d, j) => (
-                      <div key={j} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
-                        <span>{d}</span>
-                      </div>
-                    ))}
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={cn("font-bold text-sm", fromCfg?.color)}>
+                      {evt.from}
+                    </span>
+                    <span className="text-muted-foreground text-xs">→</span>
+                    <span className={cn("font-bold text-sm", toCfg?.color)}>
+                      {evt.to}
+                    </span>
+                    <Badge
+                      variant={evt.direction === "up" ? "destructive" : "secondary"}
+                      className="text-[9px] px-1.5 py-0"
+                    >
+                      {evt.direction === "up" ? "ESCALATION" : "DE-ESCALATION"}
+                    </Badge>
+                    <span className="text-xs font-mono text-muted-foreground ml-auto">
+                      {evt.prevScore} → {evt.score}/100
+                    </span>
                   </div>
-                )}
+
+                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    <span>{format(new Date(evt.timestamp), "MMM d, yyyy HH:mm:ss")}</span>
+                    <span>•</span>
+                    <span>{evt.sensorCount} stations</span>
+                    {evt.criticalCount > 0 && (
+                      <>
+                        <span>•</span>
+                        <span className="text-destructive">{evt.criticalCount} critical</span>
+                      </>
+                    )}
+                    {evt.highCount > 0 && (
+                      <>
+                        <span>•</span>
+                        <span className="text-warning">{evt.highCount} high</span>
+                      </>
+                    )}
+                  </div>
+
+                  {evt.details.length > 0 && (
+                    <div className="space-y-0.5 mt-1">
+                      {evt.details.map((d, j) => (
+                        <div key={j} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                          <span>{d}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo, useEffect, useRef, useCallback } from "react";
 import { useAllGeoProducts } from "@/hooks/useDataProducts";
 import { useRecordStormSnapshot } from "@/hooks/useStormHistory";
 import { toast } from "sonner";
@@ -9,148 +9,127 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { playAlertSound } from "@/hooks/useAlertSound";
+import {
+  type ThreatLevel, LEVEL_ORDER, THREAT_CONFIG,
+  type SensorReading, type StormAssessment,
+  computeAssessment, parseSensors,
+} from "@/lib/stormAssessment";
 
-type ThreatLevel = "MINIMAL" | "GUARDED" | "ELEVATED" | "HIGH" | "SEVERE";
-
-const THREAT_CONFIG: Record<ThreatLevel, { color: string; bg: string; border: string; icon: string }> = {
-  MINIMAL:  { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30", icon: "🟢" },
-  GUARDED:  { color: "text-sky-400",     bg: "bg-sky-500/10",     border: "border-sky-500/30",     icon: "🔵" },
-  ELEVATED: { color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   icon: "🟡" },
-  HIGH:     { color: "text-orange-400",   bg: "bg-orange-500/10",  border: "border-orange-500/30",  icon: "🟠" },
-  SEVERE:   { color: "text-red-400",      bg: "bg-red-500/10",     border: "border-red-500/30",     icon: "🔴" },
+/* ── Trend icon sub-component ── */
+const TrendIcon = ({ trend }: { trend: string }) => {
+  if (trend === "rising_fast") return <TrendingUp className="h-3 w-3 text-destructive" />;
+  if (trend === "rising") return <TrendingUp className="h-3 w-3 text-warning" />;
+  if (trend === "falling") return <TrendingDown className="h-3 w-3 text-emerald-400" />;
+  return <Minus className="h-3 w-3 text-muted-foreground" />;
 };
 
-interface SensorReading {
-  title: string;
-  stationId: string;
-  waterLevel: number;
-  trend: string;
-  trendChange: number;
-  priority: string;
-  highWaterAlert: boolean;
-  criticalAlert: boolean;
-  lat: number;
-  lng: number;
+/* ── Sensor row ── */
+function SensorRow({ s }: { s: SensorReading }) {
+  const cleanTitle = s.title
+    .replace("NOAA Water: ", "")
+    .replace("[CRITICAL] ", "")
+    .replace("[HIGH WATER] ", "");
+
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between px-4 py-2.5 text-xs",
+        s.criticalAlert && "bg-destructive/5",
+        s.highWaterAlert && !s.criticalAlert && "bg-warning/5"
+      )}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <TrendIcon trend={s.trend} />
+          <span className="font-medium text-foreground truncate max-w-[180px]">
+            {cleanTitle}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <span className="font-mono text-foreground">{s.waterLevel.toFixed(2)}ft</span>
+        <span className={cn(
+          "font-mono text-[10px]",
+          s.trendChange > 0 ? "text-destructive" : s.trendChange < 0 ? "text-emerald-400" : "text-muted-foreground"
+        )}>
+          {s.trendChange > 0 ? "+" : ""}{s.trendChange.toFixed(2)}ft
+        </span>
+        {s.criticalAlert && (
+          <Badge variant="destructive" className="text-[9px] px-1.5 py-0">CRITICAL</Badge>
+        )}
+        {s.highWaterAlert && !s.criticalAlert && (
+          <Badge className="text-[9px] px-1.5 py-0 bg-warning text-warning-foreground">HIGH</Badge>
+        )}
+        {!s.criticalAlert && !s.highWaterAlert && (
+          <Badge variant="secondary" className="text-[9px] px-1.5 py-0">NORMAL</Badge>
+        )}
+      </div>
+    </div>
+  );
 }
 
+/* ── Main panel ── */
 export default function StormThreatPanel() {
   const { data: products = [], isLoading } = useAllGeoProducts();
-  const LEVEL_ORDER: ThreatLevel[] = ["MINIMAL", "GUARDED", "ELEVATED", "HIGH", "SEVERE"];
   const prevLevelRef = useRef<ThreatLevel | null>(null);
+  const lastRecordedScore = useRef<number | null>(null);
+  const recordSnapshot = useRecordStormSnapshot();
 
-  const sensors = useMemo<SensorReading[]>(() => {
-    return products
-      .filter((p) => {
-        const c = p.content as Record<string, unknown> | null;
-        return c && (c as any).sensor_type === "bayou_water_level";
-      })
-      .map((p) => {
-        const c = p.content as any;
-        return {
-          title: p.title,
-          stationId: p.source_identifier || "unknown",
-          waterLevel: c.water_level_ft ?? 0,
-          trend: c.trend_direction ?? "stable",
-          trendChange: c.trend_change_ft ?? 0,
-          priority: p.priority || "routine",
-          highWaterAlert: !!c.high_water_alert,
-          criticalAlert: !!c.critical_alert,
-          lat: p.latitude!,
-          lng: p.longitude!,
-        };
-      });
-  }, [products]);
-
-  const assessment = useMemo(() => {
-    if (sensors.length === 0) return { level: "MINIMAL" as ThreatLevel, score: 0, details: [] as string[] };
-
-    const criticalCount = sensors.filter((s) => s.criticalAlert).length;
-    const highCount = sensors.filter((s) => s.highWaterAlert).length;
-    const risingFast = sensors.filter((s) => s.trend === "rising_fast").length;
-    const rising = sensors.filter((s) => s.trend === "rising").length;
-    const avgLevel = sensors.reduce((s, r) => s + r.waterLevel, 0) / sensors.length;
-    const maxLevel = Math.max(...sensors.map((s) => s.waterLevel));
-
-    // Score 0-100
-    let score = 0;
-    score += criticalCount * 25;
-    score += highCount * 12;
-    score += risingFast * 8;
-    score += rising * 3;
-    if (avgLevel > 2) score += 15;
-    if (avgLevel > 3) score += 15;
-    if (maxLevel > 4) score += 10;
-    score = Math.min(100, score);
-
-    let level: ThreatLevel = "MINIMAL";
-    if (score >= 75) level = "SEVERE";
-    else if (score >= 50) level = "HIGH";
-    else if (score >= 30) level = "ELEVATED";
-    else if (score >= 10) level = "GUARDED";
-
-    const details: string[] = [];
-    if (criticalCount > 0) details.push(`${criticalCount} station(s) at CRITICAL storm surge`);
-    if (highCount > 0) details.push(`${highCount} station(s) reporting HIGH water`);
-    if (risingFast > 0) details.push(`${risingFast} station(s) rising rapidly`);
-    if (maxLevel > 3) details.push(`Peak water level: ${maxLevel.toFixed(1)}ft MHHW`);
-    if (avgLevel > 1.5) details.push(`Avg water level: ${avgLevel.toFixed(1)}ft MHHW`);
-    if (details.length === 0) details.push("All stations reporting normal levels");
-
-    return { level, score, details, criticalCount, highCount, risingFast, rising, avgLevel, maxLevel };
-  }, [sensors]);
+  const sensors = useMemo<SensorReading[]>(() => parseSensors(products), [products]);
+  const assessment = useMemo<StormAssessment>(() => computeAssessment(sensors), [sensors]);
+  const sortedSensors = useMemo(() => [...sensors].sort((a, b) => b.waterLevel - a.waterLevel), [sensors]);
 
   const cfg = THREAT_CONFIG[assessment.level];
 
-  // Record snapshot when assessment changes
-  const recordSnapshot = useRecordStormSnapshot();
-  const lastRecordedScore = useRef<number | null>(null);
+  // Record snapshot when assessment score changes (debounced by ref)
+  const recordRef = useRef(recordSnapshot);
+  recordRef.current = recordSnapshot;
 
   useEffect(() => {
     if (sensors.length === 0) return;
     if (lastRecordedScore.current === assessment.score) return;
     lastRecordedScore.current = assessment.score;
-    recordSnapshot.mutate({
+    recordRef.current.mutate({
       threat_level: assessment.level,
       score: assessment.score,
       sensor_count: sensors.length,
-      critical_count: (assessment as any).criticalCount ?? 0,
-      high_count: (assessment as any).highCount ?? 0,
-      avg_water_level: (assessment as any).avgLevel ?? null,
-      max_water_level: (assessment as any).maxLevel ?? null,
+      critical_count: assessment.criticalCount,
+      high_count: assessment.highCount,
+      avg_water_level: assessment.avgLevel || null,
+      max_water_level: assessment.maxLevel || null,
       details: assessment.details,
     });
-  }, [assessment.score, sensors.length]);
+  }, [assessment.score, assessment.level, sensors.length, assessment.criticalCount, assessment.highCount, assessment.avgLevel, assessment.maxLevel, assessment.details]);
 
-  // Escalation detection
+  // Escalation detection with audio alerts
   useEffect(() => {
     if (sensors.length === 0) return;
     const prev = prevLevelRef.current;
     const curr = assessment.level;
     prevLevelRef.current = curr;
 
-    if (prev && LEVEL_ORDER.indexOf(curr) > LEVEL_ORDER.indexOf(prev)) {
-      // Play audio alert for HIGH and SEVERE escalations
+    if (!prev) return; // skip first render
+
+    const prevIdx = LEVEL_ORDER.indexOf(prev);
+    const currIdx = LEVEL_ORDER.indexOf(curr);
+
+    if (currIdx > prevIdx) {
+      // Escalation — play audio for ELEVATED+
       if (curr === "SEVERE") playAlertSound("severe");
       else if (curr === "HIGH") playAlertSound("high");
+      else if (curr === "ELEVATED") playAlertSound("elevated");
 
       toast.error(`⚠️ STORM THREAT ESCALATED: ${prev} → ${curr}`, {
         description: assessment.details.join(" • "),
         duration: 15000,
       });
-    } else if (prev && LEVEL_ORDER.indexOf(curr) < LEVEL_ORDER.indexOf(prev)) {
+    } else if (currIdx < prevIdx) {
       toast.success(`✅ Storm threat de-escalated: ${prev} → ${curr}`, {
         description: "Conditions improving across monitored stations.",
         duration: 8000,
       });
     }
-  }, [assessment.level, sensors.length]);
-
-  const TrendIcon = ({ trend }: { trend: string }) => {
-    if (trend === "rising_fast") return <TrendingUp className="h-3 w-3 text-destructive" />;
-    if (trend === "rising") return <TrendingUp className="h-3 w-3 text-warning" />;
-    if (trend === "falling") return <TrendingDown className="h-3 w-3 text-emerald-400" />;
-    return <Minus className="h-3 w-3 text-muted-foreground" />;
-  };
+  }, [assessment.level, sensors.length, assessment.details]);
 
   if (isLoading) {
     return (
@@ -204,56 +183,21 @@ export default function StormThreatPanel() {
       </div>
 
       {/* Sensor Readings Grid */}
-      {sensors.length > 0 && (
+      {sortedSensors.length > 0 && (
         <div className="rounded-lg border border-border bg-card overflow-hidden">
           <div className="p-3 border-b border-border flex items-center gap-2">
             <Waves className="h-4 w-4 text-primary" />
             <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
               Bayou Sensor Readings
             </span>
+            <Badge variant="outline" className="ml-auto text-[10px]">
+              {sortedSensors.length} sensor{sortedSensors.length !== 1 ? "s" : ""}
+            </Badge>
           </div>
           <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
-            {sensors
-              .sort((a, b) => b.waterLevel - a.waterLevel)
-              .map((s) => (
-                <div
-                  key={s.stationId}
-                  className={cn(
-                    "flex items-center justify-between px-4 py-2.5 text-xs",
-                    s.criticalAlert && "bg-destructive/5",
-                    s.highWaterAlert && !s.criticalAlert && "bg-warning/5"
-                  )}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <TrendIcon trend={s.trend} />
-                      <span className="font-medium text-foreground truncate max-w-[180px]">
-                        {s.title.replace("NOAA Water: ", "").replace("[CRITICAL] ", "").replace("[HIGH WATER] ", "")}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-mono text-foreground">
-                      {s.waterLevel.toFixed(2)}ft
-                    </span>
-                    <span className={cn(
-                      "font-mono text-[10px]",
-                      s.trendChange > 0 ? "text-destructive" : s.trendChange < 0 ? "text-emerald-400" : "text-muted-foreground"
-                    )}>
-                      {s.trendChange > 0 ? "+" : ""}{s.trendChange.toFixed(2)}ft
-                    </span>
-                    {s.criticalAlert && (
-                      <Badge variant="destructive" className="text-[9px] px-1.5 py-0">CRITICAL</Badge>
-                    )}
-                    {s.highWaterAlert && !s.criticalAlert && (
-                      <Badge className="text-[9px] px-1.5 py-0 bg-warning text-warning-foreground">HIGH</Badge>
-                    )}
-                    {!s.criticalAlert && !s.highWaterAlert && (
-                      <Badge variant="secondary" className="text-[9px] px-1.5 py-0">NORMAL</Badge>
-                    )}
-                  </div>
-                </div>
-              ))}
+            {sortedSensors.map((s) => (
+              <SensorRow key={s.stationId} s={s} />
+            ))}
           </div>
         </div>
       )}
