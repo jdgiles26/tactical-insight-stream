@@ -8,6 +8,7 @@ import {
   Waves, AlertTriangle, CloudLightning, TrendingUp, TrendingDown, Minus, Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { playAlertSound } from "@/hooks/useAlertSound";
 
 type ThreatLevel = "MINIMAL" | "GUARDED" | "ELEVATED" | "HIGH" | "SEVERE";
 
