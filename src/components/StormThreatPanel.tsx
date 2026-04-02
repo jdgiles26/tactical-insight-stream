@@ -129,6 +129,10 @@ export default function StormThreatPanel() {
     prevLevelRef.current = curr;
 
     if (prev && LEVEL_ORDER.indexOf(curr) > LEVEL_ORDER.indexOf(prev)) {
+      // Play audio alert for HIGH and SEVERE escalations
+      if (curr === "SEVERE") playAlertSound("severe");
+      else if (curr === "HIGH") playAlertSound("high");
+
       toast.error(`⚠️ STORM THREAT ESCALATED: ${prev} → ${curr}`, {
         description: assessment.details.join(" • "),
         duration: 15000,
