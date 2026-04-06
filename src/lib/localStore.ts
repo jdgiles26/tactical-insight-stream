@@ -119,13 +119,19 @@ class QueryBuilder {
   private _insertData: Row[] = [];
   private _updateData: Row = {};
   private _doSelect = false;
+  private _headOnly = false;
+  private _countMode: string | null = null;
 
   constructor(table: string) {
     this._table = table;
   }
 
   // ── SELECT ──
-  select(cols?: string) {
+  select(cols?: string, opts?: { count?: string; head?: boolean }) {
+    if (opts?.head) {
+      this._headOnly = true;
+      this._countMode = opts.count || null;
+    }
     if (this._mode !== "insert" && this._mode !== "update" && this._mode !== "upsert") {
       this._mode = "select";
     }
@@ -224,6 +230,54 @@ class QueryBuilder {
     return this;
   }
 
+  // ── OR FILTER ──
+  or(filterStr: string) {
+    const parts = filterStr.split(",");
+    const orFilters = parts.map((part) => {
+      const [col, op, ...rest] = part.split(".");
+      const val = rest.join(".");
+      return (row: Row) => {
+        const cellVal = row[col];
+        switch (op) {
+          case "eq":
+            return String(cellVal) === val;
+          case "neq":
+            return String(cellVal) !== val;
+          case "gt":
+            return cellVal > val;
+          case "gte":
+            return cellVal >= val;
+          case "lt":
+            return cellVal < val;
+          case "lte":
+            return cellVal <= val;
+          case "ilike": {
+            const regex = new RegExp(
+              val.replace(/%/g, ".*").replace(/_/g, "."),
+              "i"
+            );
+            return regex.test(String(cellVal ?? ""));
+          }
+          case "like": {
+            const regex = new RegExp(
+              val.replace(/%/g, ".*").replace(/_/g, "."),
+            );
+            return regex.test(String(cellVal ?? ""));
+          }
+          case "is":
+            if (val === "null") return cellVal == null;
+            if (val === "true") return cellVal === true;
+            if (val === "false") return cellVal === false;
+            return cellVal === val;
+          default:
+            return String(cellVal) === val;
+        }
+      };
+    });
+    this._filters.push((row) => orFilters.some((f) => f(row)));
+    return this;
+  }
+
   // ── ORDERING ──
   order(col: string, opts?: { ascending?: boolean }) {
     this._orderBy.push({ col, asc: opts?.ascending ?? true });
@@ -247,14 +301,17 @@ class QueryBuilder {
     return this as any;
   }
 
-  // ── EXECUTE (called via await / .then) ──
-  then(resolve: (val: any) => void, reject?: (err: any) => void) {
-    try {
-      const result = this.execute();
-      resolve(result);
-    } catch (e) {
-      if (reject) reject(e);
-    }
+  // ── Promise-compatible thenable ──
+  then(resolve: (val: any) => any, reject?: (err: any) => any) {
+    return Promise.resolve().then(() => this.execute()).then(resolve, reject);
+  }
+
+  catch(handler: any) {
+    return Promise.resolve().then(() => this.execute()).catch(handler);
+  }
+
+  finally(handler: any) {
+    return Promise.resolve().then(() => this.execute()).finally(handler);
   }
 
   private execute(): { data: any; error: any; count?: number } {
@@ -316,6 +373,11 @@ class QueryBuilder {
         });
       }
 
+      // HEAD-only mode: return count without data
+      if (this._headOnly) {
+        return { data: null, error: null, count: rows.length };
+      }
+
       // Apply limit
       if (this._limitN != null) rows = rows.slice(0, this._limitN);
 
@@ -373,8 +435,12 @@ class InsertBuilder {
     return this.qb.then(resolve, reject);
   }
 
-  catch(reject: any) {
-    return this.then(undefined, reject);
+  catch(handler: any) {
+    return this.qb.catch(handler);
+  }
+
+  finally(handler: any) {
+    return this.qb.finally(handler);
   }
 }
 
@@ -392,8 +458,18 @@ class UpdateBuilder {
   in(col: string, vals: any[]) { this.qb.in(col, vals); return this; }
   select(cols?: string) { this.qb.select(cols); return this; }
   single() { this.qb.single(); return this; }
-  then(resolve: any, reject?: any) { return this.qb.then(resolve, reject); }
-  catch(reject: any) { return this.then(undefined, reject); }
+
+  then(resolve: any, reject?: any) {
+    return this.qb.then(resolve, reject);
+  }
+
+  catch(handler: any) {
+    return this.qb.catch(handler);
+  }
+
+  finally(handler: any) {
+    return this.qb.finally(handler);
+  }
 }
 
 class DeleteBuilder {
@@ -407,8 +483,18 @@ class DeleteBuilder {
   eq(col: string, val: any) { this.qb.eq(col, val); return this; }
   neq(col: string, val: any) { this.qb.neq(col, val); return this; }
   in(col: string, vals: any[]) { this.qb.in(col, vals); return this; }
-  then(resolve: any, reject?: any) { return this.qb.then(resolve, reject); }
-  catch(reject: any) { return this.then(undefined, reject); }
+
+  then(resolve: any, reject?: any) {
+    return this.qb.then(resolve, reject);
+  }
+
+  catch(handler: any) {
+    return this.qb.catch(handler);
+  }
+
+  finally(handler: any) {
+    return this.qb.finally(handler);
+  }
 }
 
 class UpsertBuilder {
@@ -422,8 +508,18 @@ class UpsertBuilder {
 
   select(cols?: string) { this.qb.select(cols); return this; }
   single() { this.qb.single(); return this; }
-  then(resolve: any, reject?: any) { return this.qb.then(resolve, reject); }
-  catch(reject: any) { return this.then(undefined, reject); }
+
+  then(resolve: any, reject?: any) {
+    return this.qb.then(resolve, reject);
+  }
+
+  catch(handler: any) {
+    return this.qb.catch(handler);
+  }
+
+  finally(handler: any) {
+    return this.qb.finally(handler);
+  }
 }
 
 // ── Table proxy ──────────────────────────────────────────────────
@@ -431,9 +527,9 @@ class UpsertBuilder {
 class TableRef {
   constructor(private table: string) {}
 
-  select(cols?: string) {
+  select(cols?: string, opts?: { count?: string; head?: boolean }) {
     const qb = new QueryBuilder(this.table);
-    return qb.select(cols);
+    return qb.select(cols, opts);
   }
 
   insert(data: Row | Row[]) {

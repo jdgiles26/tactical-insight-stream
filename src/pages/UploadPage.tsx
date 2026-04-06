@@ -8,6 +8,9 @@ import { processDocumentLocally } from "@/lib/localDocumentProcessor";
 import { processVideoLocally } from "@/lib/localVideoProcessor";
 import type { DocumentProcessorResult } from "@/lib/localDocumentProcessor";
 import type { VideoProcessorResult } from "@/lib/localVideoProcessor";
+import { keySplitter, type KeySplitResult } from "@/lib/keySplitter";
+import { ddilOptimizer, type TransportClassification } from "@/lib/ddilOptimizer";
+import { KeySplitIndicator } from "@/components/KeySplitIndicator";
 
 type UploadStatus = "idle" | "uploading" | "processing" | "done" | "error";
 
@@ -25,6 +28,8 @@ interface UploadItem {
   emergencyDetected?: boolean;
   emergencyType?: string;
   missionGroupsCreated?: number;
+  keySplit?: KeySplitResult;
+  transport?: TransportClassification;
   error?: string;
 }
 
@@ -203,6 +208,15 @@ export default function UploadPage() {
         metadata: {},
       } as any).catch(() => {});
 
+      // Step 7: Key-split classification and DDIL transport assessment
+      const keySplit = keySplitter.classify(product, allDetections);
+      const transport = ddilOptimizer.classifyDataForTransport({
+        ...product,
+        priority: updatedPriority,
+        priority_score: updatedScore,
+        content: { emergency_detected: result.emergency_detected },
+      });
+
       updateUpload(idx, {
         status: "done",
         progress: 100,
@@ -215,6 +229,8 @@ export default function UploadPage() {
         emergencyDetected: result.emergency_detected,
         emergencyType: result.emergency_type ?? undefined,
         missionGroupsCreated: result.mission_groups_created ?? 0,
+        keySplit,
+        transport,
       });
 
       // Toasts
@@ -405,6 +421,16 @@ export default function UploadPage() {
                         <span className="text-[10px] font-mono text-red-400">
                           {upload.missionGroupsCreated} mission group{upload.missionGroupsCreated !== 1 ? "s" : ""} created
                         </span>
+                      )}
+                      {upload.keySplit && <KeySplitIndicator result={upload.keySplit} />}
+                      {upload.transport && (
+                        <Badge variant="outline" className={`text-[8px] gap-1 ${
+                          upload.transport.priority_class === 'flash' ? 'text-red-300 border-red-500/40' :
+                          upload.transport.priority_class === 'immediate' ? 'text-orange-300 border-orange-500/40' :
+                          'text-muted-foreground border-border'
+                        }`}>
+                          {upload.transport.transport_strategy.replace('_', ' ').toUpperCase()}
+                        </Badge>
                       )}
                       {upload.modelsUsed && upload.modelsUsed.length > 0 && upload.status === "done" && (
                         <span className="text-[10px] font-mono text-muted-foreground/70">
