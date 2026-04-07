@@ -2,12 +2,15 @@ import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useSearchDataProducts } from "@/hooks/useDataProducts";
 import { useGeoCorrelation } from "@/hooks/useGeoCorrelation";
+import { useDataProductCorrelations } from "@/hooks/useCorrelations";
 import { DataProductTable } from "@/components/DataProductTable";
+import ProductDrilldown from "@/components/ProductDrilldown";
 import CorrelationPanel from "@/components/CorrelationPanel";
 import GeoCorrelationBadge from "@/components/GeoCorrelationBadge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Search, MapPin, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Search, MapPin, Zap, Link2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 export default function DiscoveryPage() {
@@ -20,6 +23,10 @@ export default function DiscoveryPage() {
   // Geo-correlation
   const { getClusterForProduct, getCorrelatedProducts } = useGeoCorrelation();
   const [geoFilterOn, setGeoFilterOn] = useState(false);
+  const [showCorrelation, setShowCorrelation] = useState(false);
+
+  // Fetch detection_results for the selected product (for drilldown enrichment)
+  const { data: correlationData } = useDataProductCorrelations(selectedId);
 
   useEffect(() => {
     const q = searchParams.get("q");
@@ -82,14 +89,40 @@ export default function DiscoveryPage() {
         />
       </div>
 
-      {/* Correlation panel with geo-location section */}
-      {selectedId && (
+      {/* Drilldown & Correlation panels */}
+      {selectedId && selectedItem && !showCorrelation && (
+        <>
+          <ProductDrilldown
+            product={selectedItem as any}
+            detectionResults={correlationData?.detections ?? []}
+            onClose={() => setSelectedId(null)}
+          />
+          {/* Floating button to switch to correlations view */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="fixed bottom-4 right-[596px] z-[52] text-xs gap-1"
+            onClick={() => setShowCorrelation(true)}
+          >
+            <Link2 className="h-3 w-3" /> Correlations
+          </Button>
+        </>
+      )}
+      {selectedId && showCorrelation && (
         <>
           <CorrelationPanel
             productId={selectedId}
             productTitle={selectedItem?.title}
-            onClose={() => setSelectedId(null)}
+            onClose={() => { setShowCorrelation(false); setSelectedId(null); }}
           />
+          <Button
+            variant="outline"
+            size="sm"
+            className="fixed bottom-4 right-[536px] z-[52] text-xs gap-1"
+            onClick={() => setShowCorrelation(false)}
+          >
+            <Search className="h-3 w-3" /> Drilldown
+          </Button>
 
           {/* Related by Location overlay — rendered above the CorrelationPanel */}
           {geoSiblings.length > 0 && (

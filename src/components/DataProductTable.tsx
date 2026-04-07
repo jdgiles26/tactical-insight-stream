@@ -17,6 +17,7 @@ interface DataProduct {
   priority_score: number | null;
   confidence_score: number | null;
   created_at: string;
+  [key: string]: unknown; // allow extra fields for drilldown
 }
 
 export function DataProductTable({

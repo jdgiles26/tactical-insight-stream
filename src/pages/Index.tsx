@@ -16,6 +16,8 @@ import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { keySplitter } from "@/lib/keySplitter";
 import { ddilOptimizer } from "@/lib/ddilOptimizer";
+import ProductDrilldown from "@/components/ProductDrilldown";
+import { useDataProductCorrelations } from "@/hooks/useCorrelations";
 
 const PIE_COLORS = [
   "hsl(160, 70%, 45%)",
@@ -34,7 +36,11 @@ export default function Dashboard() {
   const { data: products = [], isLoading } = useDataProducts();
   const { data: stats } = useDataProductStats();
   const [drilldown, setDrilldown] = useState<DrilldownType>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
+  const { data: selectedCorrelations } = useDataProductCorrelations(selectedProductId);
 
   const { networkState, queue, queueSummary, enqueue, dequeue, classifyProduct } = useDDILStatus(5000);
   const { hotKeyStats } = useKeySplitter();
@@ -391,8 +397,21 @@ export default function Dashboard() {
           <h3 className="text-sm font-mono uppercase tracking-wider text-muted-foreground">Recent Data Products</h3>
           <Radio className="h-4 w-4 text-primary animate-pulse-glow" />
         </div>
-        <DataProductTable data={products} isLoading={isLoading} />
+        <DataProductTable
+          data={products}
+          isLoading={isLoading}
+          onRowClick={(id) => setSelectedProductId(id)}
+        />
       </div>
+
+      {/* Product Drilldown Panel */}
+      {selectedProductId && selectedProduct && (
+        <ProductDrilldown
+          product={selectedProduct as any}
+          detectionResults={selectedCorrelations?.detections ?? []}
+          onClose={() => setSelectedProductId(null)}
+        />
+      )}
     </div>
   );
 }
