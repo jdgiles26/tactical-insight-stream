@@ -1,22 +1,18 @@
 # ONNX Models Directory
 
-Place ONNX model files here for client-side inference.
+Contains ONNX model files for client-side inference.
 
-## YOLOv8n (required for video detection)
+## YOLOv8n SAR Vessel Detection
 
-Download the YOLOv8n ONNX model and place it here as `yolov8n.onnx`.
+**Model:** `yolov8n.onnx`  
+**Source:** [MeWan2808/yolov8n-sar-vessel-detection](https://huggingface.co/MeWan2808/yolov8n-sar-vessel-detection)  
+**Input:** `[1, 3, 640, 640]` (RGB, normalized 0-1)  
+**Output:** `[1, 5, 8400]` (4 bbox coords + 1 class confidence × 8400 predictions)  
+**Classes:** `{0: 'ship'}`  
+**Type:** Quantized ONNX  
+**Size:** ~12 MB  
 
-### Option 1: Export from Ultralytics
-
-```bash
-pip install ultralytics
-yolo export model=yolov8n.pt format=onnx imgsz=640
-cp yolov8n.onnx public/models/
-```
-
-### Option 2: Download pre-exported
-
-Pre-exported YOLOv8n ONNX models are available from the Ultralytics GitHub releases.
+The model is auto-detected at runtime — class labels are extracted from ONNX metadata.
 
 ## Without the model
 

@@ -3,7 +3,7 @@
  *
  * Performs REAL frame extraction from uploaded video files using
  * <video> + <canvas> browser APIs, then runs:
- *   1. ONNX Runtime Web inference with YOLOv8n (COCO 80-class) for object detection
+ *   1. ONNX Runtime Web inference with YOLOv8n SAR vessel detection model
  *   2. Qwen2.5-VL vision-language model for scene summarization
  *
  * If models are unavailable or inference fails, this module
@@ -13,25 +13,11 @@ import * as ort from "onnxruntime-web";
 import { analyzeVideoScene, type SceneSummary } from "./qwenVisionService";
 
 // ---------------------------------------------------------------------------
-// COCO 80-class labels (YOLOv8n default)
+// Model class labels — auto-detected from ONNX metadata at load time.
+// Defaults to the SAR vessel detection model's single class.
 // ---------------------------------------------------------------------------
-const COCO_LABELS = [
-  "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",
-  "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
-  "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra",
-  "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
-  "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove",
-  "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup",
-  "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange",
-  "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
-  "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse",
-  "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
-  "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
-  "hair drier", "toothbrush",
-];
-
-// Maritime-relevant COCO classes we highlight
-const MARITIME_RELEVANT = new Set(["boat", "person", "airplane", "truck", "car", "bird"]);
+let MODEL_LABELS: string[] = ["ship"];
+let MODEL_NAME = "yolov8n-sar-vessel";
 
 const CONFIDENCE_THRESHOLD = 0.35;
 const MODEL_INPUT_SIZE = 640; // YOLOv8n expects 640x640
@@ -226,16 +212,21 @@ interface RawDetection {
   confidence: number;
 }
 
+/**
+ * Parse YOLOv8 output tensor.
+ * Auto-handles any number of classes — works for both single-class SAR
+ * vessel models ([1, 5, 8400]) and multi-class COCO models ([1, 84, 8400]).
+ */
 function parseYoloOutput(
   output: Float32Array,
-  numClasses: number,
+  numChannels: number, // total channels per detection (4 + numClasses)
   imgWidth: number,
   imgHeight: number,
   inputSize: number
 ): RawDetection[] {
-  // YOLOv8 output shape: [1, 84, 8400] for 80 classes
-  // Transposed: each of 8400 predictions has [x, y, w, h, class1_conf, class2_conf, ...]
-  const numDetections = 8400;
+  const numClasses = numChannels - 4;
+  // Detect numDetections from tensor length
+  const numDetections = Math.round(output.length / numChannels);
   const results: RawDetection[] = [];
 
   const scale = Math.min(inputSize / imgWidth, inputSize / imgHeight);
@@ -321,8 +312,9 @@ let sessionPromise: Promise<ort.InferenceSession> | null = null;
 let modelLoadFailed = false;
 
 /**
- * Attempts to load a YOLOv8n ONNX model.
+ * Attempts to load a YOLOv8 ONNX model.
  * Looks for /models/yolov8n.onnx in the public directory.
+ * Auto-detects class labels from the ONNX metadata 'names' field.
  * Returns null if the model is not available.
  */
 async function getSession(): Promise<ort.InferenceSession | null> {
@@ -338,7 +330,43 @@ async function getSession(): Promise<ort.InferenceSession | null> {
           executionProviders: ["wasm"],
           graphOptimizationLevel: "all",
         });
-        console.log("[VideoProcessor] YOLOv8n ONNX model loaded successfully");
+
+        // Auto-detect class labels from ONNX model metadata
+        try {
+          // Fetch the raw model to read metadata (ort doesn't expose it directly)
+          const res = await fetch("/models/yolov8n.onnx");
+          const buf = await res.arrayBuffer();
+          const bytes = new Uint8Array(buf);
+          // Search for the 'names' metadata string in the binary
+          const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes.slice(-4096));
+          const namesMatch = text.match(/names[^{]*({[^}]+})/);
+          if (namesMatch) {
+            // Parse Python-style dict: {0: 'ship'} or {0: 'person', 1: 'bicycle', ...}
+            const rawDict = namesMatch[1];
+            const entries: Array<[number, string]> = [];
+            const entryRe = /(\d+):\s*'([^']+)'/g;
+            let m;
+            while ((m = entryRe.exec(rawDict)) !== null) {
+              entries.push([parseInt(m[1]), m[2]]);
+            }
+            if (entries.length > 0) {
+              entries.sort((a, b) => a[0] - b[0]);
+              MODEL_LABELS = entries.map((e) => e[1]);
+              console.log(`[VideoProcessor] Detected ${MODEL_LABELS.length} class(es): ${MODEL_LABELS.join(", ")}`);
+            }
+          }
+
+          // Try to extract model description
+          const descMatch = text.match(/description[^A-Za-z]*(Ultralytics[^\x00]+)/);
+          if (descMatch) {
+            MODEL_NAME = "yolov8n-sar-vessel";
+          }
+        } catch { /* metadata extraction is optional */ }
+
+        // Determine output shape for logging
+        const outputMeta = session.outputNames.map((name) => name);
+        console.log(`[VideoProcessor] ONNX model loaded. Outputs: ${outputMeta.join(", ")}. Classes: [${MODEL_LABELS.join(", ")}]`);
+
         return session;
       } catch (err) {
         console.warn(
@@ -405,15 +433,26 @@ export async function processVideoLocally(
           const outputName = session.outputNames[0] || "output0";
           const outputData = results[outputName].data as Float32Array;
 
-          const rawDets = parseYoloOutput(outputData, COCO_LABELS.length, width, height, MODEL_INPUT_SIZE);
+          // Determine numChannels from output shape: total elements / numDetections
+          // Output shape is [1, numChannels, numDetections] e.g. [1, 5, 8400]
+          const outputShape = results[outputName].dims;
+          const numChannels = outputShape.length >= 2
+            ? Number(outputShape[outputShape.length - 2])
+            : 4 + MODEL_LABELS.length;
+
+          const rawDets = parseYoloOutput(outputData, numChannels, width, height, MODEL_INPUT_SIZE);
 
           for (const det of rawDets) {
             allDetections.push({
-              label: COCO_LABELS[det.classId] || `class_${det.classId}`,
+              label: MODEL_LABELS[det.classId] || `class_${det.classId}`,
               confidence: Math.round(det.confidence * 1000) / 1000,
               bbox: { x: det.x, y: det.y, w: det.w, h: det.h },
               frame: i + 1,
             });
+          }
+
+          if (i === 0) {
+            console.log(`[VideoProcessor] Frame 1: output shape [${outputShape.join(", ")}], ${rawDets.length} raw detections`);
           }
         } catch (frameErr) {
           console.warn(`[VideoProcessor] Frame ${i + 1} inference failed:`, frameErr);
@@ -458,8 +497,8 @@ export async function processVideoLocally(
     models_used: modelsUsed.length > 0 ? modelsUsed : ["none"],
     model_source: modelSource,
     onnx_enabled: onnxEnabled,
-    yolo_model: onnxEnabled ? "yolov8n.onnx (COCO 80-class)" : "none",
-    yolo_classes: onnxEnabled ? COCO_LABELS : [],
+    yolo_model: onnxEnabled ? `${MODEL_NAME}.onnx (${MODEL_LABELS.length}-class: ${MODEL_LABELS.join(", ")})` : "none",
+    yolo_classes: onnxEnabled ? MODEL_LABELS : [],
     confidence_threshold: CONFIDENCE_THRESHOLD,
     detection_details: deduplicated,
     emergency_detected: emergencyResult.detected,

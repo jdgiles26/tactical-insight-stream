@@ -37,7 +37,7 @@ interface UploadItem {
 }
 
 const DOC_MODEL_CHAIN = "Rule-based NER + pattern matching";
-const VIDEO_MODEL = "YOLOv8n ONNX + Qwen2.5-VL-7B scene analysis";
+const VIDEO_MODEL = "YOLOv8n SAR vessel ONNX + Qwen2.5-VL-7B scene analysis";
 
 export default function UploadPage() {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
@@ -387,10 +387,10 @@ export default function UploadPage() {
             <Film className="h-4 w-4" /> Video Upload
           </h3>
           <p className="mb-1 text-[10px] font-mono text-accent/70 uppercase tracking-wider">
-            YOLOv8n ONNX · Qwen2.5-VL scene summary · real frame extraction · NMS
+            YOLOv8n SAR vessel detection · Qwen2.5-VL scene summary · real inference
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
-            Upload video for real object detection via ONNX Runtime + AI scene summarization via Qwen2.5-VL vision model. Frames are extracted and analyzed by both pipelines.
+            Upload video for real vessel detection via YOLOv8n SAR ONNX model + AI scene summarization via Qwen2.5-VL. Frames are extracted and analyzed by both pipelines.
           </p>
           <label className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed border-border bg-secondary/30 p-8 transition-colors hover:border-primary/50 hover:bg-secondary/50">
             <Upload className="h-8 w-8 text-muted-foreground" />
