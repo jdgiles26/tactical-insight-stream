@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { MetricCard } from "@/components/MetricCard";
 import { DataProductTable } from "@/components/DataProductTable";
 import { useDataProducts, useDataProductStats } from "@/hooks/useDataProducts";
@@ -8,12 +8,14 @@ import { useKeySplitter } from "@/hooks/useKeySplitter";
 import { KeySplitIndicator } from "@/components/KeySplitIndicator";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Database, Activity, Zap, AlertTriangle, TrendingUp, Radio, X, ExternalLink, Flame, Snowflake, Satellite, Signal, Wifi, WifiOff } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Database, Activity, Zap, AlertTriangle, Radio, ExternalLink, Flame, Wifi, WifiOff, ArrowRight, Send, Clock } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { keySplitter } from "@/lib/keySplitter";
+import { ddilOptimizer } from "@/lib/ddilOptimizer";
 
 const PIE_COLORS = [
   "hsl(160, 70%, 45%)",
@@ -34,24 +36,23 @@ export default function Dashboard() {
   const [drilldown, setDrilldown] = useState<DrilldownType>(null);
   const navigate = useNavigate();
 
-  const { networkState, classifyProduct } = useDDILStatus(3000);
-  const { hotKeyStats, recentHotKeys } = useKeySplitter();
+  const { networkState, queue, queueSummary, enqueue, dequeue, classifyProduct } = useDDILStatus(5000);
+  const { hotKeyStats } = useKeySplitter();
 
   const criticalCount = stats?.byPriority?.critical || 0;
   const highCount = stats?.byPriority?.high || 0;
   const processingCount = stats?.byStatus?.processing || 0;
 
-  // Classify products for transport on render
-  const transportSummary = useMemo(() => {
-    const summary = { flash: 0, immediate: 0, priority: 0, routine: 0, deferred: 0, can_send: 0, held: 0 };
-    for (const p of products.slice(0, 50)) {
-      const tc = classifyProduct(p);
-      summary[tc.priority_class]++;
-      if (tc.can_send_now) summary.can_send++;
-      else summary.held++;
+  // Auto-enqueue new products into the transport queue
+  const enqueuedRef = useRef(new Set<string>());
+  useEffect(() => {
+    for (const p of products) {
+      if (!enqueuedRef.current.has(p.id)) {
+        enqueuedRef.current.add(p.id);
+        ddilOptimizer.enqueue(p);
+      }
     }
-    return summary;
-  }, [products, classifyProduct]);
+  }, [products]);
 
   // Run key-splitting on the latest products
   const latestHotKeys = useMemo(() => {
@@ -80,38 +81,70 @@ export default function Dashboard() {
         <p className="text-sm text-muted-foreground font-mono">Real-time tactical data overview</p>
       </div>
 
-      {/* DDIL + Key-Split Status Bar */}
+      {/* DDIL Network + Transport Queue + Key-Split */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        {/* Network Transport Status */}
+        {/* Real Network Status + Queue Counts */}
         <Card className="border-border">
           <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Transport Queue</span>
-              <Badge variant="outline" className={`text-[9px] ${
-                networkState.status === 'connected' ? 'text-emerald-400 border-emerald-500/30' :
-                networkState.status === 'degraded' ? 'text-amber-400 border-amber-500/30' :
-                networkState.status === 'intermittent' ? 'text-orange-400 border-orange-500/30' :
-                'text-red-400 border-red-500/30'
-              }`}>
-                {networkState.status.toUpperCase()}
-              </Badge>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Network & Transport</span>
+              <div className="flex items-center gap-1.5">
+                {networkState.online ? (
+                  <Wifi className={`h-3 w-3 ${
+                    networkState.status === 'connected' ? 'text-emerald-400' :
+                    networkState.status === 'degraded' ? 'text-amber-400' : 'text-orange-400'
+                  }`} />
+                ) : (
+                  <WifiOff className="h-3 w-3 text-red-400" />
+                )}
+                <Badge variant="outline" className={`text-[9px] ${
+                  networkState.status === 'connected' ? 'text-emerald-400 border-emerald-500/30' :
+                  networkState.status === 'degraded' ? 'text-amber-400 border-amber-500/30' :
+                  networkState.status === 'intermittent' ? 'text-orange-400 border-orange-500/30' :
+                  'text-red-400 border-red-500/30'
+                }`}>
+                  {networkState.status.toUpperCase()}
+                </Badge>
+              </div>
             </div>
-            <div className="grid grid-cols-5 gap-1 text-center">
+            {/* Real metrics */}
+            <div className="grid grid-cols-3 gap-2 text-center mb-3">
+              <div>
+                <div className="text-lg font-bold text-foreground">
+                  {networkState.bandwidth_kbps >= 1000
+                    ? `${(networkState.bandwidth_kbps / 1000).toFixed(1)}`
+                    : networkState.bandwidth_kbps}
+                </div>
+                <div className="text-[8px] font-mono uppercase text-muted-foreground">
+                  {networkState.bandwidth_kbps >= 1000 ? 'Mbps' : 'kbps'}
+                </div>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-foreground">{networkState.latency_ms}</div>
+                <div className="text-[8px] font-mono uppercase text-muted-foreground">RTT ms</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-foreground">{networkState.effective_type}</div>
+                <div className="text-[8px] font-mono uppercase text-muted-foreground">Type</div>
+              </div>
+            </div>
+            {/* Queue class counts */}
+            <div className="grid grid-cols-5 gap-1 text-center border-t border-border pt-2">
               {(['flash', 'immediate', 'priority', 'routine', 'deferred'] as const).map(cls => (
                 <div key={cls}>
-                  <div className={`text-lg font-bold ${
+                  <div className={`text-sm font-bold ${
                     cls === 'flash' ? 'text-red-400' :
                     cls === 'immediate' ? 'text-orange-400' :
                     cls === 'priority' ? 'text-amber-400' :
                     cls === 'routine' ? 'text-muted-foreground' : 'text-muted-foreground/50'
-                  }`}>{transportSummary[cls]}</div>
-                  <div className="text-[8px] font-mono uppercase text-muted-foreground">{cls}</div>
+                  }`}>{queueSummary[cls]}</div>
+                  <div className="text-[7px] font-mono uppercase text-muted-foreground">{cls}</div>
                 </div>
               ))}
             </div>
-            <div className="mt-2 flex justify-between text-[10px] font-mono text-muted-foreground">
-              <span className="text-emerald-400">{transportSummary.can_send} sendable</span>
-              <span className="text-amber-400">{transportSummary.held} held</span>
+            <div className="mt-1 flex justify-between text-[10px] font-mono text-muted-foreground">
+              <span className="text-emerald-400">{queueSummary.sendable} sendable</span>
+              <span className="text-amber-400">{queueSummary.held} held</span>
             </div>
           </CardContent>
         </Card>
@@ -130,46 +163,59 @@ export default function Dashboard() {
               <div className="text-center">
                 <div className="text-2xl font-bold text-red-400">{hotKeyStats.hot}</div>
                 <div className="text-[10px] font-mono text-muted-foreground">HOT KEYS</div>
-                <div className="text-[9px] font-mono text-muted-foreground/60">Fast-path processing</div>
+                <div className="text-[9px] font-mono text-muted-foreground/60">Fast-path</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-400">{hotKeyStats.cold}</div>
                 <div className="text-[10px] font-mono text-muted-foreground">COLD KEYS</div>
-                <div className="text-[9px] font-mono text-muted-foreground/60">Standard pipeline</div>
+                <div className="text-[9px] font-mono text-muted-foreground/60">Standard</div>
               </div>
             </div>
             {hotKeyStats.total > 0 && (
               <div className="mt-2 h-1.5 rounded-full bg-secondary overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full transition-all"
-                  style={{ width: `${(hotKeyStats.hot / hotKeyStats.total) * 100}%` }}
-                />
+                <div className="h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full transition-all"
+                  style={{ width: `${(hotKeyStats.hot / hotKeyStats.total) * 100}%` }} />
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Recent Hot Keys */}
+        {/* Visual Priority Queue */}
         <Card className="border-border">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Recent Hot Keys</span>
-              <Flame className="h-3.5 w-3.5 text-red-400 animate-pulse" />
+              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Priority Queue</span>
+              <span className="text-[10px] font-mono text-muted-foreground">{queue.length} items</span>
             </div>
-            {latestHotKeys.length === 0 ? (
-              <div className="flex items-center justify-center h-20 text-xs text-muted-foreground">No hot keys detected</div>
+            {queue.length === 0 ? (
+              <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">Queue empty</div>
             ) : (
-              <div className="space-y-1.5 max-h-24 overflow-y-auto">
-                {latestHotKeys.slice(0, 5).map(({ product, split }) => (
-                  <div key={product.id} className="flex items-center gap-2 text-xs">
-                    <KeySplitIndicator result={split} compact />
-                    <span className="truncate text-foreground">{product.title}</span>
-                    <span className="ml-auto text-[9px] font-mono text-muted-foreground">
-                      {split.hot_key_reason?.replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <ScrollArea className="h-28">
+                <div className="space-y-1">
+                  {queue.slice(0, 20).map((item, i) => {
+                    const cls = item.priority_class;
+                    const color =
+                      cls === 'flash' ? 'border-l-red-500 bg-red-500/5' :
+                      cls === 'immediate' ? 'border-l-orange-500 bg-orange-500/5' :
+                      cls === 'priority' ? 'border-l-amber-500 bg-amber-500/5' :
+                      cls === 'routine' ? 'border-l-slate-500 bg-slate-500/5' :
+                      'border-l-slate-700 bg-slate-700/5';
+                    return (
+                      <div key={item.product_id} className={`flex items-center gap-2 border-l-2 rounded-r px-2 py-1 ${color}`}>
+                        <span className="text-[8px] font-mono font-bold uppercase w-12 shrink-0" style={{
+                          color: cls === 'flash' ? '#f87171' : cls === 'immediate' ? '#fb923c' : cls === 'priority' ? '#fbbf24' : '#94a3b8'
+                        }}>{cls}</span>
+                        <span className="text-[10px] truncate flex-1 text-foreground">{item.title}</span>
+                        {item.can_send_now ? (
+                          <Send className="h-2.5 w-2.5 text-emerald-400 shrink-0" />
+                        ) : (
+                          <Clock className="h-2.5 w-2.5 text-amber-400 shrink-0" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
             )}
           </CardContent>
         </Card>

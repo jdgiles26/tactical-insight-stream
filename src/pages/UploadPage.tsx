@@ -11,6 +11,7 @@ import type { VideoProcessorResult } from "@/lib/localVideoProcessor";
 import { keySplitter, type KeySplitResult } from "@/lib/keySplitter";
 import { ddilOptimizer, type TransportClassification } from "@/lib/ddilOptimizer";
 import { KeySplitIndicator } from "@/components/KeySplitIndicator";
+import { Badge as BadgeUI } from "@/components/ui/badge";
 
 type UploadStatus = "idle" | "uploading" | "processing" | "done" | "error";
 
@@ -208,14 +209,16 @@ export default function UploadPage() {
         metadata: {},
       } as any).catch(() => {});
 
-      // Step 7: Key-split classification and DDIL transport assessment
+      // Step 7: Key-split classification and DDIL transport queue
       const keySplit = keySplitter.classify(product, allDetections);
-      const transport = ddilOptimizer.classifyDataForTransport({
+      const enrichedProduct = {
         ...product,
         priority: updatedPriority,
         priority_score: updatedScore,
-        content: { emergency_detected: result.emergency_detected },
-      });
+        content: { ...((product.content as any) || {}), emergency_detected: result.emergency_detected },
+      };
+      ddilOptimizer.enqueue(enrichedProduct);
+      const transport = ddilOptimizer.classifyDataForTransport(enrichedProduct);
 
       updateUpload(idx, {
         status: "done",

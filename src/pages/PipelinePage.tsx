@@ -130,7 +130,7 @@ export default function PipelinePage() {
   const { data: deadLetters = [] } = useDeadLetterQueue();
   const processEvents = useProcessEvents();
   const retryDlq = useRetryDeadLetter();
-  const { networkState } = useDDILStatus(3000);
+  const { networkState, queueSummary } = useDDILStatus(5000);
   const { hotKeyStats } = useKeySplitter();
   const [realtimeCount, setRealtimeCount] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<EventBusItem | null>(null);
@@ -250,7 +250,7 @@ export default function PipelinePage() {
           { label: "Retrying", value: totalRetrying, icon: RefreshCw, color: "text-amber-400" },
           { label: "Dead Letters", value: metrics?.deadLetterCount || 0, icon: Skull, color: "text-destructive" },
           { label: "Hot Keys", value: hotKeyStats.hot, icon: Flame, color: "text-red-400" },
-          { label: "Network", value: `${networkState.bandwidth_kbps.toFixed(0)}k`, icon: Wifi, color: networkState.status === 'connected' ? 'text-emerald-400' : networkState.status === 'degraded' ? 'text-amber-400' : 'text-red-400' },
+          { label: "Queued", value: queueSummary.total, icon: Wifi, color: networkState.status === 'connected' ? 'text-emerald-400' : networkState.status === 'degraded' ? 'text-amber-400' : 'text-red-400' },
         ].map(({ label, value, icon: Icon, color }) => (
           <Card key={label}>
             <CardContent className="flex items-center gap-3 p-4">
