@@ -34,8 +34,8 @@ interface UploadItem {
   error?: string;
 }
 
-const DOC_MODEL_CHAIN = "DeBERTa-v3 → BERT NER → BART → rule-based";
-const VIDEO_MODEL = "YOLOv8 best-boat.onnx (maritime)";
+const DOC_MODEL_CHAIN = "Rule-based NER + pattern matching";
+const VIDEO_MODEL = "YOLOv8n ONNX (COCO 80-class, real inference)";
 
 export default function UploadPage() {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
@@ -244,9 +244,11 @@ export default function UploadPage() {
         );
       } else {
         const modelInfo = isVideo
-          ? "YOLO heuristic"
+          ? vidResult?.onnx_enabled
+            ? `YOLOv8n ONNX (${result.detections} real detections, ${vidResult.frames_analyzed} frames)`
+            : `no model available (${vidResult?.frames_analyzed ?? 0} frames extracted, 0 detections)`
           : `rule-based (${result.detections} entities)`;
-        toast.success(`Processed: ${file.name} — ${result.detections} detections via ${modelInfo}`);
+        toast.success(`Processed: ${file.name} — ${modelInfo}`);
       }
     } catch (err: any) {
       updateUpload(idx, { status: "error", error: err.message });
@@ -286,7 +288,7 @@ export default function UploadPage() {
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Upload & Process</h2>
         <p className="text-sm text-muted-foreground font-mono">
-          AI-native processing — documents via NLP entity extraction, video via YOLOv8 maritime detection
+          Documents via rule-based entity extraction, video via real YOLOv8n ONNX inference
         </p>
       </div>
 
@@ -348,7 +350,7 @@ export default function UploadPage() {
             <FileText className="h-4 w-4" /> Document Upload
           </h3>
           <p className="mb-1 text-[10px] font-mono text-primary/70 uppercase tracking-wider">
-            Rule-based NER · Pattern matching · Emergency detection
+            Rule-based NER · regex pattern matching · emergency detection
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
             Upload PDFs, reports, manifests, and logs. Extracts named entities, classifies document type, detects emergency triggers, and correlates with Commander's Intent.
@@ -373,10 +375,10 @@ export default function UploadPage() {
             <Film className="h-4 w-4" /> Video Upload
           </h3>
           <p className="mb-1 text-[10px] font-mono text-accent/70 uppercase tracking-wider">
-            YOLOv8 heuristic · 8-class maritime detection · NMS post-processing
+            YOLOv8n ONNX · real frame extraction · real inference · NMS
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
-            Upload surveillance footage for maritime object detection. Detections include bounding boxes, confidence scores, and class labels.
+            Upload video for real object detection via ONNX Runtime. Frames are extracted and run through YOLOv8n. Requires model at <code className="text-[10px]">/models/yolov8n.onnx</code>.
           </p>
           <label className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed border-border bg-secondary/30 p-8 transition-colors hover:border-primary/50 hover:bg-secondary/50">
             <Upload className="h-8 w-8 text-muted-foreground" />
