@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Upload, FileText, Film, Loader2, CheckCircle, AlertTriangle, Cpu, Zap, Brain, Siren } from "lucide-react";
+import { Upload, FileText, Film, Loader2, CheckCircle, AlertTriangle, Cpu, Zap, Brain, Siren, Eye } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { processDocumentLocally } from "@/lib/localDocumentProcessor";
@@ -29,13 +29,15 @@ interface UploadItem {
   emergencyDetected?: boolean;
   emergencyType?: string;
   missionGroupsCreated?: number;
+  sceneSummary?: string;
+  sceneAvailable?: boolean;
   keySplit?: KeySplitResult;
   transport?: TransportClassification;
   error?: string;
 }
 
 const DOC_MODEL_CHAIN = "Rule-based NER + pattern matching";
-const VIDEO_MODEL = "YOLOv8n ONNX (COCO 80-class, real inference)";
+const VIDEO_MODEL = "YOLOv8n ONNX + Qwen2.5-VL-7B scene analysis";
 
 export default function UploadPage() {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
@@ -123,6 +125,14 @@ export default function UploadPage() {
               detection_details: vidResult.detection_details,
               model_source: vidResult.model_source,
               yolo_classes: vidResult.yolo_classes,
+              ...(vidResult.scene_summary?.available ? {
+                scene_summary: vidResult.scene_summary.summary,
+                scene_objects: vidResult.scene_summary.objects,
+                scene_activity: vidResult.scene_summary.activity,
+                scene_environment: vidResult.scene_summary.environment,
+                scene_tactical: vidResult.scene_summary.tactical_notes,
+                scene_model: vidResult.scene_summary.model,
+              } : {}),
             } : {}),
           },
           ...(isEmergency ? {
@@ -232,6 +242,8 @@ export default function UploadPage() {
         emergencyDetected: result.emergency_detected,
         emergencyType: result.emergency_type ?? undefined,
         missionGroupsCreated: result.mission_groups_created ?? 0,
+        sceneSummary: vidResult?.scene_summary?.available ? vidResult.scene_summary.summary : undefined,
+        sceneAvailable: vidResult?.scene_summary?.available ?? false,
         keySplit,
         transport,
       });
@@ -375,10 +387,10 @@ export default function UploadPage() {
             <Film className="h-4 w-4" /> Video Upload
           </h3>
           <p className="mb-1 text-[10px] font-mono text-accent/70 uppercase tracking-wider">
-            YOLOv8n ONNX · real frame extraction · real inference · NMS
+            YOLOv8n ONNX · Qwen2.5-VL scene summary · real frame extraction · NMS
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
-            Upload video for real object detection via ONNX Runtime. Frames are extracted and run through YOLOv8n. Requires model at <code className="text-[10px]">/models/yolov8n.onnx</code>.
+            Upload video for real object detection via ONNX Runtime + AI scene summarization via Qwen2.5-VL vision model. Frames are extracted and analyzed by both pipelines.
           </p>
           <label className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed border-border bg-secondary/30 p-8 transition-colors hover:border-primary/50 hover:bg-secondary/50">
             <Upload className="h-8 w-8 text-muted-foreground" />
@@ -447,6 +459,17 @@ export default function UploadPage() {
                       <p className="mt-0.5 text-[10px] font-mono text-muted-foreground/50 truncate">
                         {upload.modelSource}
                       </p>
+                    )}
+                    {upload.sceneSummary && upload.status === "done" && (
+                      <div className="mt-2 rounded-md border border-primary/20 bg-primary/5 p-2">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <Eye className="h-3 w-3 text-primary" />
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-primary">Qwen VL Scene Summary</span>
+                        </div>
+                        <p className="text-xs text-foreground leading-relaxed">
+                          {upload.sceneSummary}
+                        </p>
+                      </div>
                     )}
                   </div>
                   <span className="text-xs font-mono text-muted-foreground">

@@ -16,7 +16,7 @@ import { formatDistanceToNow } from "date-fns";
 import {
   FileText, Film, Image, AlertTriangle, Crosshair, Tag,
   Brain, Box, Scan, Quote, MapPin, Clock, Flame, Shield,
-  Cpu, Hash, Layers, ChevronRight, X,
+  Cpu, Hash, Layers, ChevronRight, X, Eye, Activity, TreePine, Crosshair as Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { DetectionResult } from "@/hooks/useCorrelations";
@@ -54,6 +54,13 @@ interface ProductContent {
   // Video-specific
   model_source?: string;
   yolo_classes?: string[];
+  // Qwen VL scene summary
+  scene_summary?: string;
+  scene_objects?: string[];
+  scene_activity?: string;
+  scene_environment?: string;
+  scene_tactical?: string;
+  scene_model?: string;
   // generic
   [key: string]: unknown;
 }
@@ -298,6 +305,81 @@ export default function ProductDrilldown({ product, detectionResults = [], onClo
                       {yoloClasses.map((c, i) => (
                         <Badge key={i} variant="outline" className="text-[9px] font-mono">{c}</Badge>
                       ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+
+          {/* Scene Summary from Qwen VL */}
+          {content.scene_summary && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardHeader className="py-2 px-3">
+                <CardTitle className="text-xs font-mono flex items-center gap-1.5">
+                  <Eye className="h-3 w-3 text-primary" /> AI Scene Analysis
+                  {content.scene_model && (
+                    <Badge variant="secondary" className="text-[9px] font-mono ml-auto">
+                      {content.scene_model}
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-3 pb-3 space-y-2.5">
+                {/* Summary */}
+                <div>
+                  <p className="text-xs text-foreground leading-relaxed">
+                    {content.scene_summary}
+                  </p>
+                </div>
+
+                {/* Objects */}
+                {content.scene_objects && content.scene_objects.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-1 mb-1">
+                      <Scan className="h-2.5 w-2.5 text-muted-foreground" />
+                      <span className="text-[9px] font-mono uppercase text-muted-foreground">Identified Objects</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {content.scene_objects.map((obj, i) => (
+                        <Badge key={i} variant="outline" className="text-[10px] font-mono">
+                          {obj}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Activity */}
+                {content.scene_activity && (
+                  <div className="flex items-start gap-1.5">
+                    <Activity className="h-3 w-3 text-accent shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-[9px] font-mono uppercase text-muted-foreground">Activity</span>
+                      <p className="text-[11px] text-foreground">{content.scene_activity}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Environment */}
+                {content.scene_environment && (
+                  <div className="flex items-start gap-1.5">
+                    <TreePine className="h-3 w-3 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-[9px] font-mono uppercase text-muted-foreground">Environment</span>
+                      <p className="text-[11px] text-foreground">{content.scene_environment}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tactical Notes */}
+                {content.scene_tactical && (
+                  <div className="flex items-start gap-1.5">
+                    <Target className="h-3 w-3 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-[9px] font-mono uppercase text-muted-foreground">Tactical Assessment</span>
+                      <p className="text-[11px] text-foreground">{content.scene_tactical}</p>
                     </div>
                   </div>
                 )}

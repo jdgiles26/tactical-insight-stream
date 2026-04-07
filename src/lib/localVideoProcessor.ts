@@ -2,13 +2,15 @@
  * Local (client-side) video processor.
  *
  * Performs REAL frame extraction from uploaded video files using
- * <video> + <canvas> browser APIs, then runs ONNX Runtime Web
- * inference with YOLOv8n (COCO 80-class) for object detection.
+ * <video> + <canvas> browser APIs, then runs:
+ *   1. ONNX Runtime Web inference with YOLOv8n (COCO 80-class) for object detection
+ *   2. Qwen2.5-VL vision-language model for scene summarization
  *
- * If the ONNX model is unavailable or inference fails, this module
- * returns ZERO detections — it never fabricates results.
+ * If models are unavailable or inference fails, this module
+ * returns ZERO detections and no scene summary — it never fabricates results.
  */
 import * as ort from "onnxruntime-web";
+import { analyzeVideoScene, type SceneSummary } from "./qwenVisionService";
 
 // ---------------------------------------------------------------------------
 // COCO 80-class labels (YOLOv8n default)
@@ -57,6 +59,8 @@ export interface VideoProcessorResult {
   emergency_type: string | null;
   mission_groups_created: number;
   frames_analyzed: number;
+  /** Qwen2.5-VL scene summary (if available) */
+  scene_summary?: SceneSummary;
 }
 
 // ---------------------------------------------------------------------------
@@ -365,62 +369,80 @@ export async function processVideoLocally(
   let modelSource = "none";
   const modelsUsed: string[] = [];
 
+  let sceneSummary: SceneSummary | undefined;
+  let extractedFrames: ImageData[] = [];
+
   try {
     // Step 1: Extract frames from video
     console.log(`[VideoProcessor] Extracting frames from ${file.name}...`);
     const { frames, width, height } = await extractFrames(file, MAX_FRAMES_TO_SAMPLE);
     console.log(`[VideoProcessor] Extracted ${frames.length} frames (${width}x${height})`);
     framesAnalyzed = frames.length;
+    extractedFrames = frames;
 
     if (frames.length === 0) {
       console.warn("[VideoProcessor] No frames could be extracted from video");
       return makeEmptyResult(framesAnalyzed);
     }
 
-    // Step 2: Try to load ONNX model
+    // Step 2: Try to load ONNX model for object detection
     const session = await getSession();
 
-    if (!session) {
-      console.warn(
-        "[VideoProcessor] No ONNX model available. Returning 0 detections. " +
-        "To enable real detection, place a YOLOv8n ONNX model at public/models/yolov8n.onnx"
-      );
-      return makeEmptyResult(framesAnalyzed);
-    }
+    if (session) {
+      onnxEnabled = true;
+      modelSource = "onnxruntime-web (wasm)";
+      modelsUsed.push("yolov8n");
 
-    onnxEnabled = true;
-    modelSource = "onnxruntime-web (wasm)";
-    modelsUsed.push("yolov8n");
+      // Step 3: Run YOLO inference on each frame
+      for (let i = 0; i < frames.length; i++) {
+        try {
+          const tensor = preprocessFrame(frames[i], MODEL_INPUT_SIZE);
+          const inputTensor = new ort.Tensor("float32", tensor, [1, 3, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE]);
 
-    // Step 3: Run inference on each frame
-    for (let i = 0; i < frames.length; i++) {
-      try {
-        const tensor = preprocessFrame(frames[i], MODEL_INPUT_SIZE);
-        const inputTensor = new ort.Tensor("float32", tensor, [1, 3, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE]);
+          const inputName = session.inputNames[0] || "images";
+          const results = await session.run({ [inputName]: inputTensor });
 
-        const inputName = session.inputNames[0] || "images";
-        const results = await session.run({ [inputName]: inputTensor });
+          const outputName = session.outputNames[0] || "output0";
+          const outputData = results[outputName].data as Float32Array;
 
-        const outputName = session.outputNames[0] || "output0";
-        const outputData = results[outputName].data as Float32Array;
+          const rawDets = parseYoloOutput(outputData, COCO_LABELS.length, width, height, MODEL_INPUT_SIZE);
 
-        const rawDets = parseYoloOutput(outputData, COCO_LABELS.length, width, height, MODEL_INPUT_SIZE);
-
-        for (const det of rawDets) {
-          allDetections.push({
-            label: COCO_LABELS[det.classId] || `class_${det.classId}`,
-            confidence: Math.round(det.confidence * 1000) / 1000,
-            bbox: { x: det.x, y: det.y, w: det.w, h: det.h },
-            frame: i + 1,
-          });
+          for (const det of rawDets) {
+            allDetections.push({
+              label: COCO_LABELS[det.classId] || `class_${det.classId}`,
+              confidence: Math.round(det.confidence * 1000) / 1000,
+              bbox: { x: det.x, y: det.y, w: det.w, h: det.h },
+              frame: i + 1,
+            });
+          }
+        } catch (frameErr) {
+          console.warn(`[VideoProcessor] Frame ${i + 1} inference failed:`, frameErr);
         }
-      } catch (frameErr) {
-        console.warn(`[VideoProcessor] Frame ${i + 1} inference failed:`, frameErr);
+      }
+    } else {
+      console.warn(
+        "[VideoProcessor] No ONNX model available — skipping object detection. " +
+        "Place yolov8n.onnx in public/models/ to enable."
+      );
+    }
+  } catch (err) {
+    console.error("[VideoProcessor] Frame extraction/detection failed:", err);
+  }
+
+  // Step 4: Run Qwen2.5-VL scene analysis (parallel-safe, non-blocking)
+  try {
+    if (extractedFrames.length > 0) {
+      console.log("[VideoProcessor] Running Qwen2.5-VL scene analysis...");
+      sceneSummary = await analyzeVideoScene(extractedFrames);
+      if (sceneSummary.available) {
+        modelsUsed.push("Qwen2.5-VL-7B");
+        console.log("[VideoProcessor] Qwen VL scene summary:", sceneSummary.summary);
+      } else {
+        console.warn("[VideoProcessor] Qwen VL unavailable:", sceneSummary.error);
       }
     }
   } catch (err) {
-    console.error("[VideoProcessor] Processing failed:", err);
-    return makeEmptyResult(framesAnalyzed);
+    console.warn("[VideoProcessor] Qwen VL analysis failed (non-blocking):", err);
   }
 
   // Deduplicate across frames (same label, similar position)
@@ -444,6 +466,7 @@ export async function processVideoLocally(
     emergency_type: emergencyResult.type,
     mission_groups_created: emergencyResult.detected ? 1 : 0,
     frames_analyzed: framesAnalyzed,
+    scene_summary: sceneSummary,
   };
 }
 
