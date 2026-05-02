@@ -232,10 +232,13 @@ class QueryBuilder {
 
   // ── OR FILTER ──
   or(filterStr: string) {
-    const parts = filterStr.split(",");
-    const orFilters = parts.map((part) => {
-      const [col, op, ...rest] = part.split(".");
-      const val = rest.join(".");
+    // Parse OR filter expressions. Each clause is "col.op.val" separated by
+    // commas, but values may themselves contain commas, so we use a regex
+    // that matches "word.operator.value" greedily per comma-delimited segment
+    // and re-join segments that don't look like a new clause.
+    const clauses = this._parseOrClauses(filterStr);
+    const orFilters = clauses.map((clause) => {
+      const [col, op, val] = clause;
       return (row: Row) => {
         const cellVal = row[col];
         switch (op) {
@@ -244,13 +247,13 @@ class QueryBuilder {
           case "neq":
             return String(cellVal) !== val;
           case "gt":
-            return cellVal > val;
+            return this._coerceCompare(cellVal, val, (a, b) => a > b);
           case "gte":
-            return cellVal >= val;
+            return this._coerceCompare(cellVal, val, (a, b) => a >= b);
           case "lt":
-            return cellVal < val;
+            return this._coerceCompare(cellVal, val, (a, b) => a < b);
           case "lte":
-            return cellVal <= val;
+            return this._coerceCompare(cellVal, val, (a, b) => a <= b);
           case "ilike": {
             const regex = new RegExp(
               val.replace(/%/g, ".*").replace(/_/g, "."),
@@ -276,6 +279,64 @@ class QueryBuilder {
     });
     this._filters.push((row) => orFilters.some((f) => f(row)));
     return this;
+  }
+
+  /**
+   * Coerce both sides to numbers when possible, then apply the comparator.
+   * Falls back to string comparison only if neither side is numeric.
+   */
+  private _coerceCompare(
+    cellVal: any,
+    filterVal: string,
+    cmp: (a: number | string, b: number | string) => boolean
+  ): boolean {
+    const numCell = Number(cellVal);
+    const numFilter = Number(filterVal);
+    if (!isNaN(numCell) && !isNaN(numFilter)) {
+      return cmp(numCell, numFilter);
+    }
+    return cmp(String(cellVal), filterVal);
+  }
+
+  /**
+   * Parse an OR filter string into [col, op, val] triples.
+   *
+   * The Supabase OR syntax is: "col.op.val,col2.op2.val2"
+   * A valid clause starts with an identifier followed by a known operator.
+   * Commas inside values (e.g. "col.eq.hello,world") are preserved by only
+   * splitting when the next segment matches the clause pattern.
+   */
+  private _parseOrClauses(filterStr: string): [string, string, string][] {
+    const KNOWN_OPS = new Set(["eq", "neq", "gt", "gte", "lt", "lte", "ilike", "like", "is"]);
+    const segments = filterStr.split(",");
+    const clauses: [string, string, string][] = [];
+    let current: string | null = null;
+
+    for (const seg of segments) {
+      const dotIdx1 = seg.indexOf(".");
+      const dotIdx2 = dotIdx1 >= 0 ? seg.indexOf(".", dotIdx1 + 1) : -1;
+      const maybeOp = dotIdx2 > dotIdx1 ? seg.slice(dotIdx1 + 1, dotIdx2) : "";
+
+      if (current === null || KNOWN_OPS.has(maybeOp)) {
+        // Flush previous clause
+        if (current !== null) {
+          clauses.push(this._splitClause(current));
+        }
+        current = seg;
+      } else {
+        // This segment is a continuation of the previous value (comma in value)
+        current += "," + seg;
+      }
+    }
+    if (current !== null) {
+      clauses.push(this._splitClause(current));
+    }
+    return clauses;
+  }
+
+  private _splitClause(clause: string): [string, string, string] {
+    const [col, op, ...rest] = clause.split(".");
+    return [col, op, rest.join(".")];
   }
 
   // ── ORDERING ──
