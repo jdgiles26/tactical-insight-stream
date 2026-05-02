@@ -1,3 +1,5 @@
+import { invokeLiveDataIngester, invokeRssIngester } from "@/lib/localFunctions";
+
 /**
  * Local in-memory data store that implements the Supabase client interface.
  * Falls back gracefully when the Supabase backend is unavailable.
@@ -644,8 +646,26 @@ class ChannelMock {
 
 class FunctionsMock {
   async invoke(name: string, opts?: { body?: any }) {
-    // Return empty success for all function calls
-    console.log(`[localStore] functions.invoke("${name}") — returning mock response`);
+    const body = opts?.body ?? {};
+
+    if (name === "live-data-ingester") {
+      console.log(`[localStore] functions.invoke("${name}", source=${body.source}) — delegating to localFunctions`);
+      return invokeLiveDataIngester(
+        (table, rows) => store.insert(table, rows),
+        body,
+      );
+    }
+
+    if (name === "rss-ingester") {
+      console.log(`[localStore] functions.invoke("${name}") — delegating to localFunctions`);
+      return invokeRssIngester(
+        (table, rows) => store.insert(table, rows),
+        body,
+      );
+    }
+
+    // Fallback for unknown functions
+    console.log(`[localStore] functions.invoke("${name}") — no local impl, returning mock`);
     return { data: { success: true }, error: null };
   }
 }

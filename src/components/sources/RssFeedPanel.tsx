@@ -24,6 +24,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { RSS_FEED_CATALOG, type RssFeed, type RssFeedCategory } from "@/lib/rssFeedCatalog";
 import { fetchAndParseRss } from "@/lib/webScraper";
+import { useQueryClient } from "@tanstack/react-query";
+import { computePriorityScore, scoreToPriorityLevel } from "@/lib/priorityScoring";
 
 const RSS_STATE_KEY = "mdg_rss_feed_state";
 
@@ -54,6 +56,7 @@ function getDefaultFeedState(): FeedState {
 }
 
 export default function RssFeedPanel() {
+  const queryClient = useQueryClient();
   const [feedStates, setFeedStates] = useState<FeedStates>(loadFeedStates);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [loadingFeeds, setLoadingFeeds] = useState<Set<string>>(new Set());
@@ -146,11 +149,14 @@ export default function RssFeedPanel() {
       let ingested = 0;
       for (const item of items.slice(0, 25)) {
         try {
+          const textForScoring = `${item.title || ""} ${item.description || ""}`;
+          const priority_score = computePriorityScore(textForScoring);
+          const priority_level = scoreToPriorityLevel(priority_score);
           const { error } = await supabase.from("data_products").insert({
             title: item.title,
             source_type: "rss_feed",
             source_identifier: feed.id,
-            status: "pending",
+            status: "ingested",
             content: {
               description: item.description?.substring(0, 5000),
               link: item.link,
@@ -162,9 +168,16 @@ export default function RssFeedPanel() {
               feed_url: feed.url,
             },
             confidence_score: 0.6,
+            priority_score,
+            priority_level,
           } as any);
           if (!error) ingested++;
         } catch { /* skip individual item errors */ }
+      }
+
+      if (ingested > 0) {
+        queryClient.invalidateQueries({ queryKey: ["data_products"] });
+        queryClient.invalidateQueries({ queryKey: ["data_products_geo"] });
       }
 
       updateFeedState(feed.id, {

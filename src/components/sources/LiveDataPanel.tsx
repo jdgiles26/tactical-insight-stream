@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,9 +39,17 @@ const OPENSKY_REGIONS = [
 ];
 
 export default function LiveDataPanel() {
+  const queryClient = useQueryClient();
   const [rssLoading, setRssLoading] = useState(false);
   const [liveLoading, setLiveLoading] = useState<string | null>(null);
   const [selectedRegion, setSelectedRegion] = useState("caribbean_corridor");
+
+  const invalidateCaches = () => {
+    queryClient.invalidateQueries({ queryKey: ["data_products"] });
+    queryClient.invalidateQueries({ queryKey: ["data_products_geo"] });
+    queryClient.invalidateQueries({ queryKey: ["data_product_stats"] });
+    queryClient.invalidateQueries({ queryKey: ["queue_products"] });
+  };
 
   const handleRssIngest = async () => {
     setRssLoading(true);
@@ -49,7 +58,8 @@ export default function LiveDataPanel() {
         body: { action: "ingest" },
       });
       if (error) throw error;
-      toast.success(`RSS ingestion complete: ${data?.total_ingested || 0} new articles`);
+      invalidateCaches();
+      toast.success(`RSS ingestion complete: ${data?.total_ingested || data?.ingested || 0} new articles`);
     } catch (err: any) {
       toast.error("RSS ingestion failed: " + err.message);
     } finally {
@@ -66,6 +76,7 @@ export default function LiveDataPanel() {
 
       const { data, error } = await supabase.functions.invoke("live-data-ingester", { body });
       if (error) throw error;
+      invalidateCaches();
       toast.success(`${source.toUpperCase()}: ${data?.ingested || 0} records ingested`);
     } catch (err: any) {
       toast.error(`${source} ingestion failed: ` + err.message);

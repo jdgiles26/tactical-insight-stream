@@ -34,6 +34,8 @@ import {
   clearScrapeHistory,
   type ScrapeHistoryEntry,
 } from "@/lib/webScraper";
+import { useQueryClient } from "@tanstack/react-query";
+import { computePriorityScore, scoreToPriorityLevel } from "@/lib/priorityScoring";
 
 const EXTRACTION_MODES: { value: ExtractionMode; label: string; icon: typeof FileText; description: string }[] = [
   { value: "auto", label: "Auto", icon: Bot, description: "Automatically detect best extraction" },
@@ -58,6 +60,7 @@ const DEPTH_OPTIONS = [
 ];
 
 export default function WebScraperPanel() {
+  const queryClient = useQueryClient();
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState<ExtractionMode>("auto");
   const [cssSelector, setCssSelector] = useState("");
@@ -108,11 +111,14 @@ export default function WebScraperPanel() {
     if (!result) return;
     setSavingProduct(true);
     try {
+      const textForScoring = `${result.title} ${result.content}`;
+      const priority_score = computePriorityScore(textForScoring);
+      const priority_level = scoreToPriorityLevel(priority_score);
       const { error } = await supabase.from("data_products").insert({
         title: `[Scraped] ${result.title}`,
         source_type: "document",
         source_identifier: result.url,
-        status: "pending",
+        status: "ingested",
         content: {
           text: result.content.substring(0, 50000),
           url: result.url,
@@ -126,8 +132,12 @@ export default function WebScraperPanel() {
           raw_html_length: result.rawHtmlLength,
         },
         confidence_score: 0.7,
+        priority_score,
+        priority_level,
       } as any);
       if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["data_products"] });
+      queryClient.invalidateQueries({ queryKey: ["data_products_geo"] });
       toast.success("Saved as data product");
     } catch (err: any) {
       toast.error("Failed to save: " + err.message);
