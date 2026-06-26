@@ -37,6 +37,8 @@ export interface VideoProcessorResult {
   models_used: string[];
   model_source: string;
   onnx_enabled: boolean;
+  /** Execution provider used for ONNX inference: "webgpu" | "wasm" | "none" */
+  execution_provider: string;
   yolo_model: string;
   yolo_classes: string[];
   confidence_threshold: number;
@@ -310,10 +312,27 @@ function nms(detections: RawDetection[], iouThreshold: number): RawDetection[] {
 
 let sessionPromise: Promise<ort.InferenceSession> | null = null;
 let modelLoadFailed = false;
+/** Records which execution provider was successfully used ("webgpu" | "wasm" | "none"). */
+let activeExecutionProvider = "none";
+
+/**
+ * Returns true when the browser exposes a WebGPU adapter.
+ * Used to choose the fastest ONNX execution provider at runtime.
+ */
+async function isWebGPUAvailable(): Promise<boolean> {
+  try {
+    if (typeof navigator === "undefined" || !("gpu" in navigator)) return false;
+    const adapter = await (navigator as any).gpu.requestAdapter();
+    return adapter !== null;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Attempts to load a YOLOv8 ONNX model.
  * Looks for /models/yolov8n.onnx in the public directory.
+ * Prefers WebGPU execution for maximum throughput; falls back to WASM.
  * Auto-detects class labels from the ONNX metadata 'names' field.
  * Returns null if the model is not available.
  */
@@ -323,13 +342,24 @@ async function getSession(): Promise<ort.InferenceSession | null> {
   if (!sessionPromise) {
     sessionPromise = (async () => {
       try {
-        // Configure ONNX Runtime to use WASM backend
-        ort.env.wasm.numThreads = 1;
+        // Detect the best available execution provider
+        const webgpu = await isWebGPUAvailable();
+        const executionProviders: string[] = webgpu ? ["webgpu", "wasm"] : ["wasm"];
+
+        if (!webgpu) {
+          // WASM-only path: configure thread count
+          ort.env.wasm.numThreads = 1;
+        }
+
+        console.log(`[VideoProcessor] Loading ONNX model with providers: [${executionProviders.join(", ")}]`);
 
         const session = await ort.InferenceSession.create("/models/yolov8n.onnx", {
-          executionProviders: ["wasm"],
+          executionProviders,
           graphOptimizationLevel: "all",
         });
+
+        // Record which backend was actually used (ORT picks the first available)
+        activeExecutionProvider = webgpu ? "webgpu" : "wasm";
 
         // Auto-detect class labels from ONNX model metadata
         try {
@@ -418,7 +448,7 @@ export async function processVideoLocally(
 
     if (session) {
       onnxEnabled = true;
-      modelSource = "onnxruntime-web (wasm)";
+      modelSource = `onnxruntime-web (${activeExecutionProvider})`;
       modelsUsed.push("yolov8n");
 
       // Step 3: Run YOLO inference on each frame
@@ -497,6 +527,7 @@ export async function processVideoLocally(
     models_used: modelsUsed.length > 0 ? modelsUsed : ["none"],
     model_source: modelSource,
     onnx_enabled: onnxEnabled,
+    execution_provider: onnxEnabled ? activeExecutionProvider : "none",
     yolo_model: onnxEnabled ? `${MODEL_NAME}.onnx (${MODEL_LABELS.length}-class: ${MODEL_LABELS.join(", ")})` : "none",
     yolo_classes: onnxEnabled ? MODEL_LABELS : [],
     confidence_threshold: CONFIDENCE_THRESHOLD,
@@ -521,6 +552,7 @@ function makeEmptyResult(framesAnalyzed: number): VideoProcessorResult {
     models_used: ["none"],
     model_source: "none (no ONNX model available)",
     onnx_enabled: false,
+    execution_provider: "none",
     yolo_model: "none",
     yolo_classes: [],
     confidence_threshold: CONFIDENCE_THRESHOLD,

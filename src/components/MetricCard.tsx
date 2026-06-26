@@ -9,6 +9,8 @@ interface MetricCardProps {
   trend?: "up" | "down" | "neutral";
   variant?: "default" | "primary" | "warning" | "critical";
   onClick?: () => void;
+  /** Show a pulsing skeleton while data is loading */
+  isLoading?: boolean;
 }
 
 const variantStyles = {
@@ -25,7 +27,7 @@ const iconVariants = {
   critical: "text-critical",
 };
 
-export function MetricCard({ title, value, subtitle, icon: Icon, variant = "default", onClick }: MetricCardProps) {
+export function MetricCard({ title, value, subtitle, icon: Icon, variant = "default", onClick, isLoading }: MetricCardProps) {
   return (
     <div
       className={cn(
@@ -38,7 +40,11 @@ export function MetricCard({ title, value, subtitle, icon: Icon, variant = "defa
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">{title}</p>
-          <p className="text-3xl font-bold tracking-tight text-card-foreground">{value}</p>
+          {isLoading ? (
+            <div className="h-9 w-16 animate-pulse rounded bg-secondary" />
+          ) : (
+            <p className="text-3xl font-bold tracking-tight text-card-foreground">{value}</p>
+          )}
           {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
         </div>
         <div className={cn("rounded-md bg-secondary p-2", iconVariants[variant])}>
