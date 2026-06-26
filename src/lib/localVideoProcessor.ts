@@ -15,13 +15,47 @@ import { analyzeVideoScene, type SceneSummary } from "./qwenVisionService";
 // ---------------------------------------------------------------------------
 // Model class labels — auto-detected from ONNX metadata at load time.
 // Defaults to the SAR vessel detection model's single class.
+// Falls back to COCO-80 when a general model is loaded without metadata.
 // ---------------------------------------------------------------------------
+
+/** COCO-80 class names used as fallback for general YOLOv8 models */
+const COCO_80_LABELS: string[] = [
+  "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",
+  "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
+  "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra",
+  "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+  "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove",
+  "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup",
+  "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange",
+  "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+  "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse",
+  "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+  "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
+  "hair drier", "toothbrush",
+];
+
 let MODEL_LABELS: string[] = ["ship"];
 let MODEL_NAME = "yolov8n-sar-vessel";
 
 const CONFIDENCE_THRESHOLD = 0.35;
 const MODEL_INPUT_SIZE = 640; // YOLOv8n expects 640x640
 const MAX_FRAMES_TO_SAMPLE = 8; // Sample up to 8 frames from the video
+
+/**
+ * Resolves a class ID to a human-readable object name.
+ * Uses the model's own labels when available (extracted from ONNX metadata).
+ * Falls back to the COCO-80 label set for multi-class models without metadata.
+ */
+export function resolveClassLabel(classId: number): string {
+  if (classId >= 0 && classId < MODEL_LABELS.length) {
+    return MODEL_LABELS[classId];
+  }
+  // Fallback to COCO-80 if model labels don't cover this class ID
+  if (classId >= 0 && classId < COCO_80_LABELS.length) {
+    return COCO_80_LABELS[classId];
+  }
+  return `class_${classId}`;
+}
 
 export interface VideoDetection {
   label: string;
@@ -386,10 +420,27 @@ async function getSession(): Promise<ort.InferenceSession | null> {
             }
           }
 
+          // If metadata extraction yielded no labels but the model has multiple
+          // output channels (indicating a multi-class model), use COCO-80 as fallback.
+          if (MODEL_LABELS.length <= 1) {
+            const outputShape = session.outputNames.length > 0
+              ? (session as any)?.handler?.outputNames ?? []
+              : [];
+            // Check if output suggests more than 1 class (channels > 5 means multi-class)
+            // We'll verify this at inference time; set COCO fallback preemptively
+            // only if the model was clearly not a single-class SAR model.
+            const possibleMultiClass = !namesMatch;
+            if (possibleMultiClass && MODEL_LABELS[0] === "ship") {
+              MODEL_LABELS = [...COCO_80_LABELS];
+              MODEL_NAME = "yolov8n-coco80";
+              console.log(`[VideoProcessor] No metadata labels found — using COCO-80 fallback (${MODEL_LABELS.length} classes)`);
+            }
+          }
+
           // Try to extract model description
           const descMatch = text.match(/description[^A-Za-z]*(Ultralytics[^\x00]+)/);
           if (descMatch) {
-            MODEL_NAME = "yolov8n-sar-vessel";
+            MODEL_NAME = MODEL_LABELS.length > 1 ? "yolov8n-coco80" : "yolov8n-sar-vessel";
           }
         } catch { /* metadata extraction is optional */ }
 
@@ -474,7 +525,7 @@ export async function processVideoLocally(
 
           for (const det of rawDets) {
             allDetections.push({
-              label: MODEL_LABELS[det.classId] || `class_${det.classId}`,
+              label: resolveClassLabel(det.classId),
               confidence: Math.round(det.confidence * 1000) / 1000,
               bbox: { x: det.x, y: det.y, w: det.w, h: det.h },
               frame: i + 1,
