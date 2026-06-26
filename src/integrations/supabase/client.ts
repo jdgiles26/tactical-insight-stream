@@ -3,7 +3,7 @@ import type { Database } from './types';
 import { localSupabase } from '@/lib/localStore';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY || '';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
 
 // Use real Supabase client only when we have a valid JWT anon key (starts with 'eyJ').
 // The current project has an sb_publishable_* key which PostgREST does not accept,
