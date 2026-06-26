@@ -22,6 +22,7 @@ export function useDataProducts() {
         return [];
       }
     },
+    refetchInterval: 15_000, // refresh every 15 s for live tile counts
   });
 }
 

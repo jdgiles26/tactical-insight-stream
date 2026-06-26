@@ -9,7 +9,8 @@ import { KeySplitIndicator } from "@/components/KeySplitIndicator";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Database, Activity, Zap, AlertTriangle, Radio, ExternalLink, Flame, Wifi, WifiOff, ArrowRight, Send, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Database, Activity, Zap, AlertTriangle, Radio, ExternalLink, Flame, Wifi, WifiOff, ArrowRight, Send, Clock, Bell, SortAsc, SortDesc } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
@@ -18,6 +19,8 @@ import { keySplitter } from "@/lib/keySplitter";
 import { ddilOptimizer } from "@/lib/ddilOptimizer";
 import ProductDrilldown from "@/components/ProductDrilldown";
 import { useDataProductCorrelations } from "@/hooks/useCorrelations";
+import { useCorrelationAlerts } from "@/hooks/useCorrelationAlerts";
+import { computeTileCounts } from "@/lib/tileCounts";
 
 const PIE_COLORS = [
   "hsl(160, 70%, 45%)",
@@ -30,12 +33,15 @@ const PIE_COLORS = [
   "hsl(38, 60%, 40%)",
 ];
 
-type DrilldownType = "critical" | "high" | null;
+type DrilldownType = "critical" | "high" | "processing" | null;
+type DrilldownSort = "score" | "date";
 
 export default function Dashboard() {
   const { data: products = [], isLoading } = useDataProducts();
   const { data: stats } = useDataProductStats();
+  const { data: allAlerts = [] } = useCorrelationAlerts();
   const [drilldown, setDrilldown] = useState<DrilldownType>(null);
+  const [drilldownSort, setDrilldownSort] = useState<DrilldownSort>("score");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -45,9 +51,11 @@ export default function Dashboard() {
   const { networkState, queue, queueSummary, enqueue, dequeue, classifyProduct } = useDDILStatus(5000);
   const { hotKeyStats } = useKeySplitter();
 
-  const criticalCount = stats?.byPriority?.critical || 0;
-  const highCount = stats?.byPriority?.high || 0;
-  const processingCount = stats?.byStatus?.processing || 0;
+  // Derive tile counts directly from the same `products` array used by the drilldown.
+  // This guarantees the number on each tile always matches the drill-down row count,
+  // even when the separate stats query is slow, stale, or temporarily unavailable.
+  const { criticalCount, highCount, processingCount } = computeTileCounts(products);
+  const unacknowledgedAlerts = allAlerts.filter((a) => !a.acknowledged).length;
 
   // Auto-enqueue new products into the transport queue
   const enqueuedRef = useRef(new Set<string>());
@@ -68,9 +76,20 @@ export default function Dashboard() {
     })).filter(x => x.split.is_hot_key);
   }, [products]);
 
-  const drilldownItems = drilldown
-    ? products.filter((p) => p.priority === drilldown).sort((a, b) => (b.priority_score ?? 0) - (a.priority_score ?? 0))
-    : [];
+  const drilldownItems = useMemo(() => {
+    if (!drilldown) return [];
+    const filtered = drilldown === "processing"
+      ? products.filter((p) => p.status === "processing")
+      : products.filter((p) => p.priority === drilldown);
+    return drilldownSort === "score"
+      ? [...filtered].sort((a, b) => (b.priority_score ?? 0) - (a.priority_score ?? 0))
+      : [...filtered].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [drilldown, drilldownSort, products]);
+
+  // Summary stats for the drilldown header
+  const drilldownAvgScore = drilldownItems.length > 0
+    ? drilldownItems.reduce((s, p) => s + (Number(p.priority_score) || 0), 0) / drilldownItems.length
+    : null;
 
   const sourceData = stats?.bySource
     ? Object.entries(stats.bySource).map(([name, value]) => ({ name, value }))
@@ -228,13 +247,14 @@ export default function Dashboard() {
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <MetricCard
           title="Total Products"
-          value={stats?.total || 0}
+          value={stats?.total || products.length}
           subtitle="All ingested data"
           icon={Database}
           variant="primary"
+          isLoading={isLoading}
         />
         <MetricCard
           title="Critical Items"
@@ -242,6 +262,7 @@ export default function Dashboard() {
           subtitle="Click to drill down"
           icon={AlertTriangle}
           variant="critical"
+          isLoading={isLoading}
           onClick={() => setDrilldown("critical")}
         />
         <MetricCard
@@ -250,32 +271,78 @@ export default function Dashboard() {
           subtitle="Click to drill down"
           icon={Zap}
           variant="warning"
+          isLoading={isLoading}
           onClick={() => setDrilldown("high")}
         />
         <MetricCard
           title="Processing"
           value={processingCount}
-          subtitle="Currently in pipeline"
+          subtitle="Click to drill down"
           icon={Activity}
+          isLoading={isLoading}
+          onClick={() => setDrilldown("processing")}
+        />
+        <MetricCard
+          title="Active Alerts"
+          value={unacknowledgedAlerts}
+          subtitle="Click to view alerts"
+          icon={Bell}
+          variant={unacknowledgedAlerts > 0 ? "critical" : "default"}
+          onClick={() => navigate("/alerts")}
         />
       </div>
 
       {/* Drilldown Dialog */}
-      <Dialog open={!!drilldown} onOpenChange={(open) => !open && setDrilldown(null)}>
+      <Dialog open={!!drilldown} onOpenChange={(open) => {
+        if (!open) { setDrilldown(null); setDrilldownSort("score"); }
+      }}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {drilldown === "critical" ? (
                 <AlertTriangle className="h-5 w-5 text-critical" />
+              ) : drilldown === "processing" ? (
+                <Activity className="h-5 w-5 text-primary" />
               ) : (
                 <Zap className="h-5 w-5 text-warning" />
               )}
-              {drilldown === "critical" ? "Critical" : "High Priority"} Items ({drilldownItems.length})
+              {drilldown === "critical" ? "Critical" : drilldown === "processing" ? "Processing" : "High Priority"} Items ({drilldownItems.length})
             </DialogTitle>
             <DialogDescription className="font-mono text-xs">
-              Detailed breakdown of {drilldown} priority data products
+              {drilldown === "processing"
+                ? "Data products currently running through the pipeline"
+                : `Detailed breakdown of ${drilldown} priority data products`}
             </DialogDescription>
           </DialogHeader>
+
+          {/* Enhancement 8: Summary stats bar */}
+          {drilldownItems.length > 0 && drilldown !== "processing" && (
+            <div className="flex items-center gap-4 rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs font-mono text-muted-foreground">
+              <span>Total: <span className="text-foreground font-bold">{drilldownItems.length}</span></span>
+              {drilldownAvgScore !== null && (
+                <span>Avg score: <span className="text-foreground font-bold">{(drilldownAvgScore * 100).toFixed(0)}%</span></span>
+              )}
+              <span className="ml-auto flex items-center gap-1">
+                {/* Enhancement 7: Sort toggle */}
+                <Button
+                  size="sm"
+                  variant={drilldownSort === "score" ? "secondary" : "ghost"}
+                  className="h-6 gap-1 px-2 text-[10px]"
+                  onClick={() => setDrilldownSort("score")}
+                >
+                  <SortDesc className="h-3 w-3" /> Score
+                </Button>
+                <Button
+                  size="sm"
+                  variant={drilldownSort === "date" ? "secondary" : "ghost"}
+                  className="h-6 gap-1 px-2 text-[10px]"
+                  onClick={() => setDrilldownSort("date")}
+                >
+                  <SortAsc className="h-3 w-3" /> Newest
+                </Button>
+              </span>
+            </div>
+          )}
 
           {drilldownItems.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">No {drilldown} items found</p>
@@ -297,6 +364,9 @@ export default function Dashboard() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-sm text-foreground truncate">{item.title}</span>
                           <StatusBadge status={item.priority as any} />
+                          {drilldown === "processing" && (
+                            <Badge variant="outline" className="text-[9px] text-blue-400 border-blue-500/30">IN PIPELINE</Badge>
+                          )}
                         </div>
                         <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground font-mono">
                           <span>{item.source_type}</span>
@@ -308,48 +378,68 @@ export default function Dashboard() {
                           <span>{formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}</span>
                         </div>
 
-                        {/* Why it's critical */}
-                        <div className="mt-2 rounded border border-border bg-background/50 p-2">
-                          <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">
-                            Why {drilldown}
-                          </p>
-                          {item.priority_reasoning ? (
-                            <p className="text-xs text-foreground">{item.priority_reasoning}</p>
-                          ) : (
-                            <div className="text-xs text-foreground space-y-0.5">
-                              {item.priority_score != null && Number(item.priority_score) >= 0.9 && (
-                                <p>• Priority score ≥ 90% ({(Number(item.priority_score) * 100).toFixed(0)}%)</p>
-                              )}
-                              {item.priority_score != null && Number(item.priority_score) >= 0.7 && Number(item.priority_score) < 0.9 && (
-                                <p>• Elevated priority score ({(Number(item.priority_score) * 100).toFixed(0)}%)</p>
-                              )}
-                              {content && typeof content === "object" && (content as any).altitude != null && Number((content as any).altitude) < 500 && (
-                                <p>• Extremely low altitude ({Number((content as any).altitude).toFixed(0)}m)</p>
-                              )}
-                              {content && typeof content === "object" && (content as any).squawk === "7700" && (
-                                <p>• Emergency squawk code (7700)</p>
-                              )}
-                              {content && typeof content === "object" && (content as any).squawk === "7600" && (
-                                <p>• Radio failure squawk code (7600)</p>
-                              )}
-                              {content && typeof content === "object" && (content as any).vertical_rate != null && Math.abs(Number((content as any).vertical_rate)) > 10 && (
-                                <p>• Rapid altitude change ({Number((content as any).vertical_rate).toFixed(1)} m/s)</p>
-                              )}
-                              {item.source_type === "document" && content && typeof content === "object" && (content as any).category && (
-                                <p>• Category: {(content as any).category} — {(content as any).feed || "intel feed"}</p>
-                              )}
-                              {!item.priority_reasoning && item.priority_score != null && Number(item.priority_score) < 0.7 && (
-                                <p>• Classified as {drilldown} by automated priority engine</p>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                        {/* Why it's critical / high */}
+                        {drilldown !== "processing" && (
+                          <div className="mt-2 rounded border border-border bg-background/50 p-2">
+                            <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">
+                              Why {drilldown}
+                            </p>
+                            {item.priority_reasoning ? (
+                              <p className="text-xs text-foreground">{item.priority_reasoning}</p>
+                            ) : (
+                              <div className="text-xs text-foreground space-y-0.5">
+                                {item.priority_score != null && Number(item.priority_score) >= 0.9 && (
+                                  <p>• Priority score ≥ 90% ({(Number(item.priority_score) * 100).toFixed(0)}%)</p>
+                                )}
+                                {item.priority_score != null && Number(item.priority_score) >= 0.7 && Number(item.priority_score) < 0.9 && (
+                                  <p>• Elevated priority score ({(Number(item.priority_score) * 100).toFixed(0)}%)</p>
+                                )}
+                                {content && typeof content === "object" && (content as any).altitude != null && Number((content as any).altitude) < 500 && (
+                                  <p>• Extremely low altitude ({Number((content as any).altitude).toFixed(0)}m)</p>
+                                )}
+                                {content && typeof content === "object" && (content as any).squawk === "7700" && (
+                                  <p>• Emergency squawk code (7700)</p>
+                                )}
+                                {content && typeof content === "object" && (content as any).squawk === "7600" && (
+                                  <p>• Radio failure squawk code (7600)</p>
+                                )}
+                                {content && typeof content === "object" && (content as any).vertical_rate != null && Math.abs(Number((content as any).vertical_rate)) > 10 && (
+                                  <p>• Rapid altitude change ({Number((content as any).vertical_rate).toFixed(1)} m/s)</p>
+                                )}
+                                {item.source_type === "document" && content && typeof content === "object" && (content as any).category && (
+                                  <p>• Category: {(content as any).category} — {(content as any).feed || "intel feed"}</p>
+                                )}
+                                {!item.priority_reasoning && item.priority_score != null && Number(item.priority_score) < 0.7 && (
+                                  <p>• Classified as {drilldown} by automated priority engine</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
                     </div>
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Enhancement 9: View All navigation */}
+          {drilldownItems.length > 0 && (
+            <div className="pt-2 flex justify-end border-t border-border">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-1.5 text-xs font-mono"
+                onClick={() => {
+                  setDrilldown(null);
+                  if (drilldown === "processing") navigate("/pipeline");
+                  else navigate("/ingest");
+                }}
+              >
+                View all in full list <ArrowRight className="h-3 w-3" />
+              </Button>
             </div>
           )}
         </DialogContent>
