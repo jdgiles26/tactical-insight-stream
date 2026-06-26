@@ -664,9 +664,111 @@ class FunctionsMock {
       );
     }
 
+    if (name === "pipeline-orchestrator") {
+      console.log(`[localStore] functions.invoke("${name}") — delegating to local pipeline`);
+      return this._invokePipelineOrchestrator(body);
+    }
+
     // Fallback for unknown functions
     console.log(`[localStore] functions.invoke("${name}") — no local impl, returning mock`);
     return { data: { success: true }, error: null };
+  }
+
+  private async _invokePipelineOrchestrator(body: any): Promise<{ data: any; error: any }> {
+    const action = body?.action ?? "status";
+
+    if (action === "status") {
+      const products = store.getTable("data_products");
+      const events = store.getTable("event_bus");
+      const staged: Record<string, number> = {
+        ingestion: 0, processing: 0, enrichment: 0, correlation: 0, dissemination: 0,
+      };
+      for (const evt of events) {
+        if (evt.stage && staged[evt.stage] !== undefined) {
+          staged[evt.stage]++;
+        }
+      }
+      return {
+        data: {
+          success: true,
+          pipeline_status: "active",
+          total_products: products.length,
+          stages: staged,
+          last_run: new Date().toISOString(),
+          throughput: { events_per_minute: events.length > 0 ? Math.min(events.length, 30) : 0 },
+        },
+        error: null,
+      };
+    }
+
+    if (action === "process") {
+      // Move pending data_products through pipeline stages
+      const products = store.getTable("data_products").filter(
+        (p) => p.status === "ingested" || p.status === "processing"
+      );
+      let processed = 0;
+      for (const product of products.slice(0, 20)) {
+        // Create event bus entry
+        store.insert("event_bus", [{
+          id: crypto.randomUUID(),
+          topic: "mdg.processing",
+          partition_key: product.id,
+          payload: { data_product_id: product.id, title: product.title },
+          status: "completed",
+          stage: "processing",
+          data_product_id: product.id,
+          retry_count: 0,
+          max_retries: 3,
+          consumer_group: "local",
+          offset_id: Date.now(),
+          created_at: new Date().toISOString(),
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          metadata: {},
+        }]);
+        // Update product status
+        store.update("data_products", { status: "processed" }, (r) => r.id === product.id);
+        processed++;
+      }
+      return {
+        data: { success: true, processed, action: "process" },
+        error: null,
+      };
+    }
+
+    if (action === "enrich") {
+      const products = store.getTable("data_products").filter(
+        (p) => p.status === "processed" || p.status === "tagged"
+      );
+      let enriched = 0;
+      for (const product of products.slice(0, 20)) {
+        store.insert("event_bus", [{
+          id: crypto.randomUUID(),
+          topic: "mdg.enrichment",
+          partition_key: product.id,
+          payload: { data_product_id: product.id, title: product.title },
+          status: "completed",
+          stage: "enrichment",
+          data_product_id: product.id,
+          retry_count: 0,
+          max_retries: 3,
+          consumer_group: "local",
+          offset_id: Date.now(),
+          created_at: new Date().toISOString(),
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          metadata: {},
+        }]);
+        store.update("data_products", { status: "enriched" }, (r) => r.id === product.id);
+        enriched++;
+      }
+      return {
+        data: { success: true, enriched, action: "enrich" },
+        error: null,
+      };
+    }
+
+    return { data: { success: true, action }, error: null };
   }
 }
 

@@ -33,10 +33,12 @@ interface UploadItem {
   sceneAvailable?: boolean;
   keySplit?: KeySplitResult;
   transport?: TransportClassification;
+  nlpTags?: string[];
+  documentCategory?: string;
   error?: string;
 }
 
-const DOC_MODEL_CHAIN = "Rule-based NER + pattern matching";
+const DOC_MODEL_CHAIN = "NLP topic classifier + sentiment + keyphrase + NER";
 const VIDEO_MODEL = "YOLOv8n SAR vessel ONNX + Qwen2.5-VL-7B scene analysis";
 
 export default function UploadPage() {
@@ -99,8 +101,10 @@ export default function UploadPage() {
       const docResult = !isVideo ? (result as DocumentProcessorResult) : null;
       const vidResult = isVideo ? (result as VideoProcessorResult) : null;
 
-      const updatedPriority = isEmergency ? "critical" : "medium";
-      const updatedScore = isEmergency ? 0.95 : 0.6;
+      const updatedPriority = isEmergency ? "critical" : 
+        (docResult?.urgency_level === "high" ? "high" : "medium");
+      const updatedScore = isEmergency ? 0.95 : 
+        (docResult?.urgency_level === "high" ? 0.8 : 0.6);
 
       await supabase
         .from("data_products")
@@ -120,6 +124,11 @@ export default function UploadPage() {
               detection_details: docResult.detection_details,
               key_elements: docResult.key_elements,
               urgency_level: docResult.urgency_level,
+              nlp_tags: docResult.nlp_tags,
+              topics: docResult.topics,
+              sentiment: docResult.sentiment,
+              key_phrases: docResult.key_phrases,
+              document_category: docResult.document_category,
             } : {}),
             ...(vidResult ? {
               detection_details: vidResult.detection_details,
@@ -246,6 +255,8 @@ export default function UploadPage() {
         sceneAvailable: vidResult?.scene_summary?.available ?? false,
         keySplit,
         transport,
+        nlpTags: docResult?.nlp_tags ?? undefined,
+        documentCategory: docResult?.document_category?.category ?? undefined,
       });
 
       // Toasts
@@ -319,7 +330,7 @@ export default function UploadPage() {
         <div className="flex items-center gap-2 text-muted-foreground">
           <Zap className="h-3.5 w-3.5 text-warning" />
           <span className="text-foreground font-medium">Pipeline:</span>
-          <span>ingestion → NLP/YOLO → emergency detection → tagging → correlation</span>
+          <span>ingestion → NLP classification → entity extraction → emergency detection → tagging → correlation</span>
         </div>
         <div className="flex items-center gap-2 text-muted-foreground">
           <Siren className="h-3.5 w-3.5 text-red-400" />
@@ -362,7 +373,7 @@ export default function UploadPage() {
             <FileText className="h-4 w-4" /> Document Upload
           </h3>
           <p className="mb-1 text-[10px] font-mono text-primary/70 uppercase tracking-wider">
-            Rule-based NER · regex pattern matching · emergency detection
+            NLP Topic Classification · Sentiment Analysis · Key Phrase Extraction · NER
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
             Upload PDFs, reports, manifests, and logs. Extracts named entities, classifies document type, detects emergency triggers, and correlates with Commander's Intent.
@@ -469,6 +480,23 @@ export default function UploadPage() {
                         <p className="text-xs text-foreground leading-relaxed">
                           {upload.sceneSummary}
                         </p>
+                      </div>
+                    )}
+                    {upload.nlpTags && upload.nlpTags.length > 0 && upload.status === "done" && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {upload.nlpTags.map((tag, tIdx) => (
+                          <Badge key={tIdx} variant="outline" className={`text-[9px] font-mono ${
+                            tag.startsWith('topic:') ? 'text-blue-300 border-blue-500/30' :
+                            tag.startsWith('category:') ? 'text-emerald-300 border-emerald-500/30' :
+                            tag.startsWith('tone:') ? 'text-amber-300 border-amber-500/30' :
+                            tag.startsWith('entity:') ? 'text-purple-300 border-purple-500/30' :
+                            tag.startsWith('urgency:') ? 'text-red-300 border-red-500/30' :
+                            tag.startsWith('emergency:') ? 'text-red-400 border-red-500/40' :
+                            'text-muted-foreground border-border'
+                          }`}>
+                            {tag}
+                          </Badge>
+                        ))}
                       </div>
                     )}
                   </div>
