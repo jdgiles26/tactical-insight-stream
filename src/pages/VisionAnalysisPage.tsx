@@ -2,8 +2,8 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
   Upload, Film, Loader2, CheckCircle, AlertTriangle,
-  Brain, Eye, ChevronDown, ChevronRight, Cpu, Zap, Play,
-  Image as ImageIcon, FileVideo,
+  Brain, Eye, ChevronDown, ChevronRight, Cpu, Zap, Search,
+  Image as ImageIcon, FileVideo, Plus, X,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ import {
   type LFMDetection,
   type LFMSceneSummary,
   type ModelLoadStatus,
-} from "@/lib/lfmVisionService";
+} from "@/lib/visionService";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,6 +42,8 @@ export default function VisionAnalysisPage() {
   const [modelStatus, setModelStatus] = useState<ModelLoadStatus>("idle");
   const [modelProgress, setModelProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
+  const [objectLabels, setObjectLabels] = useState<string[]>([]);
+  const [labelInput, setLabelInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Listen to model load status
@@ -58,14 +60,17 @@ export default function VisionAnalysisPage() {
   }, []);
 
   const processFile = useCallback(async (file: File, idx: number) => {
-    // Generate thumbnail
     const thumbnailUrl = URL.createObjectURL(file);
     updateItem(idx, { status: "processing", progress: 5, progressStage: "Starting...", thumbnailUrl });
 
     try {
-      const result = await processVideoWithLFM(file, (stage, percent) => {
-        updateItem(idx, { progress: percent, progressStage: stage });
-      });
+      const result = await processVideoWithLFM(
+        file,
+        (stage, percent) => {
+          updateItem(idx, { progress: percent, progressStage: stage });
+        },
+        objectLabels.length > 0 ? objectLabels : undefined
+      );
 
       updateItem(idx, {
         status: "done",
@@ -75,7 +80,7 @@ export default function VisionAnalysisPage() {
       });
 
       if (result.success) {
-        toast.success(`Analysis complete: ${result.detections} objects identified`);
+        toast.success(`Analysis complete: ${result.detections} objects detected`);
       } else {
         toast.warning("Analysis completed with limited results");
       }
@@ -87,7 +92,7 @@ export default function VisionAnalysisPage() {
       });
       toast.error(`Analysis failed: ${err.message}`);
     }
-  }, [updateItem]);
+  }, [updateItem, objectLabels]);
 
   const handleFiles = useCallback((files: FileList | File[]) => {
     const fileArray = Array.from(files).filter(
@@ -109,7 +114,6 @@ export default function VisionAnalysisPage() {
 
     setItems((prev) => [...prev, ...newItems]);
 
-    // Process files sequentially (model can only handle one at a time)
     fileArray.forEach((file, i) => {
       setTimeout(() => processFile(file, startIdx + i), i * 500);
     });
@@ -125,12 +129,24 @@ export default function VisionAnalysisPage() {
 
   const handlePreloadModel = useCallback(async () => {
     try {
-      toast.info("Loading LFM2.5-VL model... This may take a moment.");
+      toast.info("Loading vision models... This may take a moment.");
       await loadLFMPipeline();
-      toast.success("Model loaded and ready!");
+      toast.success("Models loaded and ready!");
     } catch (err: any) {
       toast.error(`Model load failed: ${err.message}`);
     }
+  }, []);
+
+  const addLabel = useCallback(() => {
+    const trimmed = labelInput.trim().toLowerCase();
+    if (trimmed && !objectLabels.includes(trimmed)) {
+      setObjectLabels((prev) => [...prev, trimmed]);
+    }
+    setLabelInput("");
+  }, [labelInput, objectLabels]);
+
+  const removeLabel = useCallback((label: string) => {
+    setObjectLabels((prev) => prev.filter((l) => l !== label));
   }, []);
 
   return (
@@ -143,7 +159,7 @@ export default function VisionAnalysisPage() {
             Vision Analysis
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            LiquidAI LFM2.5-VL-450M • In-browser WebGPU inference • Object detection & scene summarization
+            In-browser inference • Open-vocabulary object detection • Scene captioning
           </p>
         </div>
 
@@ -155,7 +171,7 @@ export default function VisionAnalysisPage() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-purple-600/20 border border-purple-500/30 text-purple-300 text-xs font-mono hover:bg-purple-600/30 transition-colors"
             >
               <Cpu className="h-3.5 w-3.5" />
-              Pre-load Model
+              Pre-load Models
             </button>
           )}
           {modelStatus === "loading" && (
@@ -167,7 +183,7 @@ export default function VisionAnalysisPage() {
           {modelStatus === "ready" && (
             <Badge variant="outline" className="text-green-300 border-green-500/40">
               <Zap className="h-3 w-3 mr-1" />
-              Model Ready (WebGPU)
+              Models Ready
             </Badge>
           )}
           {modelStatus === "error" && (
@@ -177,6 +193,55 @@ export default function VisionAnalysisPage() {
             </Badge>
           )}
         </div>
+      </div>
+
+      {/* Open Vocabulary Object Detection Input */}
+      <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Search className="h-4 w-4 text-blue-400" />
+          <h3 className="text-sm font-medium">Open Vocabulary Object Detection</h3>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Enter objects to detect in your uploaded media. The OWL-ViT model will find and draw bounding boxes around matching objects.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={labelInput}
+            onChange={(e) => setLabelInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLabel(); } }}
+            placeholder="e.g. person, vehicle, boat, weapon..."
+            className="flex-1 rounded-md border border-accent/30 bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+          />
+          <button
+            onClick={addLabel}
+            disabled={!labelInput.trim()}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600/20 border border-blue-500/30 text-blue-300 text-xs font-mono hover:bg-blue-600/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add
+          </button>
+        </div>
+        {objectLabels.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {objectLabels.map((label) => (
+              <Badge
+                key={label}
+                variant="outline"
+                className="text-xs px-2 py-0.5 text-blue-300 border-blue-500/40 cursor-pointer hover:bg-blue-500/10"
+                onClick={() => removeLabel(label)}
+              >
+                {label}
+                <X className="h-3 w-3 ml-1" />
+              </Badge>
+            ))}
+          </div>
+        )}
+        {objectLabels.length === 0 && (
+          <p className="text-[10px] text-muted-foreground/70 italic">
+            No detection labels set — scene captioning will still run. Add labels above for targeted object detection with bounding boxes.
+          </p>
+        )}
       </div>
 
       {/* Upload Zone */}
@@ -227,18 +292,18 @@ export default function VisionAnalysisPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
           <InfoCard
             icon={<Brain className="h-5 w-5 text-purple-400" />}
-            title="Vision-Language Model"
-            description="LFM2.5-VL-450M processes visual content and generates natural language descriptions of detected objects and scenes."
+            title="Scene Captioning"
+            description="ViT-GPT2 generates natural language descriptions of scenes, identifying objects, activities, and environment."
           />
           <InfoCard
-            icon={<Cpu className="h-5 w-5 text-blue-400" />}
-            title="WebGPU Acceleration"
-            description="Runs entirely in your browser using GPU acceleration. No data leaves your device — complete privacy."
+            icon={<Search className="h-5 w-5 text-blue-400" />}
+            title="Open-Vocab Detection"
+            description="OWL-ViT detects any object you describe in free text — no fixed categories. Enter what to find and get bounding boxes."
           />
           <InfoCard
             icon={<Zap className="h-5 w-5 text-green-400" />}
-            title="Real-time Analysis"
-            description="Upload videos to extract frames and analyze each for objects, activities, and tactical elements."
+            title="100% In-Browser"
+            description="All inference runs locally via transformers.js. No data leaves your device — complete privacy guaranteed."
           />
         </div>
       )}
@@ -263,7 +328,6 @@ function InfoCard({ icon, title, description }: { icon: React.ReactNode; title: 
 }
 
 function AnalysisCard({ item }: { item: AnalysisItem }) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const isVideo = item.file.type.startsWith("video/");
 
   return (
@@ -333,7 +397,8 @@ function AnalysisCard({ item }: { item: AnalysisItem }) {
 
 function ResultDisplay({ result }: { result: LFMProcessorResult }) {
   const [summaryOpen, setSummaryOpen] = useState(true);
-  const [detectionsOpen, setDetectionsOpen] = useState(false);
+  const [detectionsOpen, setDetectionsOpen] = useState(true);
+  const [clipsOpen, setClipsOpen] = useState(true);
 
   return (
     <div className="space-y-3 pt-2 border-t border-accent/10">
@@ -367,6 +432,33 @@ function ResultDisplay({ result }: { result: LFMProcessorResult }) {
         <span>{result.model_source}</span>
       </div>
 
+      {/* Scene Clips / Frame Thumbnails */}
+      {result.frame_thumbnails && result.frame_thumbnails.length > 0 && (
+        <Collapsible open={clipsOpen} onOpenChange={setClipsOpen}>
+          <CollapsibleTrigger className="flex items-center gap-1.5 w-full text-left rounded-md border border-green-500/20 bg-green-500/5 px-3 py-2 hover:bg-green-500/10 transition-colors">
+            {clipsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            <Film className="h-3.5 w-3.5 text-green-400" />
+            <span className="text-xs font-medium">Scene Clips ({result.frame_thumbnails.length} frames)</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {result.frame_thumbnails.map((thumb, i) => (
+                <div key={i} className="relative rounded-md overflow-hidden border border-accent/20 bg-black">
+                  <img
+                    src={thumb}
+                    alt={`Frame ${i + 1}`}
+                    className="w-full h-auto object-cover"
+                  />
+                  <span className="absolute bottom-1 left-1 text-[9px] font-mono bg-black/70 text-white px-1 rounded">
+                    Frame {i + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
       {/* Scene Summary */}
       {result.scene_summary?.available && (
         <Collapsible open={summaryOpen} onOpenChange={setSummaryOpen}>
@@ -381,14 +473,14 @@ function ResultDisplay({ result }: { result: LFMProcessorResult }) {
         </Collapsible>
       )}
 
-      {/* Detection Details */}
+      {/* Detection Details with Bounding Boxes */}
       {result.detection_details.length > 0 && (
         <Collapsible open={detectionsOpen} onOpenChange={setDetectionsOpen}>
           <CollapsibleTrigger className="flex items-center gap-1.5 w-full text-left rounded-md border border-accent/20 bg-accent/5 px-3 py-2 hover:bg-accent/10 transition-colors">
             {detectionsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             <Eye className="h-3.5 w-3.5 text-accent" />
             <span className="text-xs font-medium">
-              Detections ({result.detection_details.length})
+              Detected Objects ({result.detection_details.length})
             </span>
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2">
@@ -448,11 +540,11 @@ function SceneSummaryDisplay({ summary }: { summary: LFMSceneSummary }) {
 
 function DetectionList({ detections }: { detections: LFMDetection[] }) {
   return (
-    <div className="rounded-md border border-accent/20 bg-accent/5 p-2 space-y-1 max-h-60 overflow-y-auto">
+    <div className="rounded-md border border-accent/20 bg-accent/5 p-2 space-y-1 max-h-80 overflow-y-auto">
       {detections.map((det, i) => (
         <div
           key={i}
-          className="flex items-center gap-2 text-[11px] font-mono rounded px-2 py-1 bg-background/50"
+          className="flex items-center gap-2 text-[11px] font-mono rounded px-2 py-1.5 bg-background/50 border border-accent/10"
         >
           <Badge
             variant="outline"
@@ -461,6 +553,11 @@ function DetectionList({ detections }: { detections: LFMDetection[] }) {
             {(det.confidence * 100).toFixed(0)}%
           </Badge>
           <span className="text-foreground font-medium">{det.label}</span>
+          {det.box && (
+            <span className="text-muted-foreground text-[9px]">
+              [{Math.round(det.box.xmin)},{Math.round(det.box.ymin)}→{Math.round(det.box.xmax)},{Math.round(det.box.ymax)}]
+            </span>
+          )}
           <span className="text-muted-foreground ml-auto">frame {det.frame}</span>
         </div>
       ))}
