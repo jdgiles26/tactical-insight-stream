@@ -40,7 +40,7 @@ interface UploadItem {
 }
 
 const DOC_MODEL_CHAIN = "Rule-based NER + pattern matching";
-const VIDEO_MODEL = "YOLOv8n SAR vessel ONNX + Qwen2.5-VL-7B scene analysis";
+const VIDEO_MODEL = "LFM2.5-VL-450M WebGPU in-browser vision-language analysis";
 
 /** Collapsible detection snapshot showing each detection result */
 function DetectionSnapshot({
@@ -245,7 +245,7 @@ export default function UploadPage() {
         for (const det of vidResult.detection_details) {
           await supabase.from("detection_results").insert({
             data_product_id: product.id,
-            detector_type: "yolo",
+            detector_type: "lfm-vl",
             label: det.label,
             confidence: det.confidence,
             bounding_box: det.bbox,
