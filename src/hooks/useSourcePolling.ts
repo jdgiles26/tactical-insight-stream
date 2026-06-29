@@ -150,10 +150,17 @@ async function pollSource(source: DataSource): Promise<number> {
     res = await fetch(source.endpoint_url, fetchOpts);
   } catch {
     // Try CORS proxy fallback
-    res = await fetch(
-      `https://api.allorigins.win/raw?url=${encodeURIComponent(source.endpoint_url)}`,
-      { signal: AbortSignal.timeout(15000) }
-    );
+    try {
+      res = await fetch(
+        `https://proxy.corsfix.com/?${encodeURIComponent(source.endpoint_url)}`,
+        { signal: AbortSignal.timeout(15000) }
+      );
+    } catch {
+      res = await fetch(
+        `https://corsproxy.io/?${encodeURIComponent(source.endpoint_url)}`,
+        { signal: AbortSignal.timeout(15000) }
+      );
+    }
   }
 
   if (!res.ok) {

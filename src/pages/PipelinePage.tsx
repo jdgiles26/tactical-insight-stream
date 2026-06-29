@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useSeenItems, useVisibilityTracker } from "@/hooks/useSeenItems";
 import {
   usePipelineStages,
@@ -58,6 +58,9 @@ function EventDetailDialog({ event, open, onClose }: { event: EventBusItem | nul
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-sm font-mono">Event #{event.offset_id}</DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Pipeline event details for stage: {event.stage}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2 text-xs">
