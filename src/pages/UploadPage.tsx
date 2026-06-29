@@ -1,13 +1,14 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Upload, FileText, Film, Loader2, CheckCircle, AlertTriangle, Cpu, Zap, Brain, Siren, Eye } from "lucide-react";
+import { Upload, FileText, Film, Loader2, CheckCircle, AlertTriangle, Cpu, Zap, Brain, Siren, Eye, ChevronDown, ChevronRight } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { processDocumentLocally } from "@/lib/localDocumentProcessor";
 import { processVideoLocally } from "@/lib/localVideoProcessor";
-import type { DocumentProcessorResult } from "@/lib/localDocumentProcessor";
-import type { VideoProcessorResult } from "@/lib/localVideoProcessor";
+import type { DocumentProcessorResult, Detection as DocDetection } from "@/lib/localDocumentProcessor";
+import type { VideoProcessorResult, VideoDetection } from "@/lib/localVideoProcessor";
 import { keySplitter, type KeySplitResult } from "@/lib/keySplitter";
 import { ddilOptimizer, type TransportClassification } from "@/lib/ddilOptimizer";
 import { KeySplitIndicator } from "@/components/KeySplitIndicator";
@@ -40,6 +41,94 @@ interface UploadItem {
 
 const DOC_MODEL_CHAIN = "NLP topic classifier + sentiment + keyphrase + NER";
 const VIDEO_MODEL = "YOLOv8n SAR vessel ONNX + Qwen2.5-VL-7B scene analysis";
+  detectionDetails?: VideoDetection[] | DocDetection[];
+  keyElements?: Record<string, string>;
+  error?: string;
+}
+
+const DOC_MODEL_CHAIN = "Rule-based NER + pattern matching";
+const VIDEO_MODEL = "LFM2.5-VL-450M WebGPU in-browser vision-language analysis";
+
+/** Collapsible detection snapshot showing each detection result */
+function DetectionSnapshot({
+  detections,
+  keyElements,
+  isVideo,
+}: {
+  detections: VideoDetection[] | DocDetection[];
+  keyElements?: Record<string, string>;
+  isVideo: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mt-2">
+      <CollapsibleTrigger className="flex items-center gap-1.5 w-full text-left rounded-md border border-accent/20 bg-accent/5 px-2 py-1.5 hover:bg-accent/10 transition-colors">
+        {isOpen ? (
+          <ChevronDown className="h-3 w-3 text-accent" />
+        ) : (
+          <ChevronRight className="h-3 w-3 text-accent" />
+        )}
+        <Eye className="h-3 w-3 text-accent" />
+        <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-accent">
+          Detection Snapshot ({detections.length} {isVideo ? "object" : "entit"}{detections.length !== 1 ? (isVideo ? "s" : "ies") : (isVideo ? "" : "y")})
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-1">
+        <div className="rounded-md border border-accent/20 bg-accent/5 p-2 space-y-1.5 max-h-60 overflow-y-auto">
+          {/* Key Elements (for documents) */}
+          {keyElements && Object.keys(keyElements).length > 0 && (
+            <div className="mb-2 pb-1.5 border-b border-accent/10">
+              <span className="text-[9px] font-mono uppercase text-accent/70 tracking-wider">Key Elements</span>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1">
+                {Object.entries(keyElements).map(([key, value]) => (
+                  <div key={key} className="flex gap-1 text-[10px]">
+                    <span className="font-mono text-muted-foreground">{key.replace(/_/g, " ")}:</span>
+                    <span className="text-foreground truncate">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Individual Detections */}
+          {detections.map((det, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-2 text-[10px] font-mono rounded px-1.5 py-0.5 bg-background/50"
+            >
+              <Badge
+                variant="outline"
+                className={`text-[8px] px-1 py-0 ${
+                  det.confidence >= 0.85
+                    ? "text-red-300 border-red-500/40"
+                    : det.confidence >= 0.65
+                    ? "text-orange-300 border-orange-500/40"
+                    : "text-blue-300 border-blue-500/40"
+                }`}
+              >
+                {(det.confidence * 100).toFixed(1)}%
+              </Badge>
+              <span className="text-foreground font-medium">{det.label.replace(/_/g, " ")}</span>
+              {isVideo && "frame" in det && (
+                <span className="text-muted-foreground ml-auto">frame {(det as VideoDetection).frame}</span>
+              )}
+              {isVideo && "bbox" in det && (det as VideoDetection).bbox.w > 0 && (
+                <span className="text-muted-foreground">
+                  [{(det as VideoDetection).bbox.x},{(det as VideoDetection).bbox.y} {(det as VideoDetection).bbox.w}×{(det as VideoDetection).bbox.h}]
+                </span>
+              )}
+              {!isVideo && "raw_entity" in det && (det as DocDetection).raw_entity && (
+                <span className="text-muted-foreground ml-auto truncate max-w-[200px]">
+                  &ldquo;{(det as DocDetection).raw_entity}&rdquo;
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export default function UploadPage() {
   const [uploads, setUploads] = useState<UploadItem[]>([]);
@@ -170,7 +259,7 @@ export default function UploadPage() {
         for (const det of vidResult.detection_details) {
           await supabase.from("detection_results").insert({
             data_product_id: product.id,
-            detector_type: "yolo",
+            detector_type: "lfm-vl",
             label: det.label,
             confidence: det.confidence,
             bounding_box: det.bbox,
@@ -257,6 +346,8 @@ export default function UploadPage() {
         transport,
         nlpTags: docResult?.nlp_tags ?? undefined,
         documentCategory: docResult?.document_category?.category ?? undefined,
+        detectionDetails: isVideo ? vidResult!.detection_details : docResult!.detection_details,
+        keyElements: docResult?.key_elements,
       });
 
       // Toasts
@@ -498,6 +589,13 @@ export default function UploadPage() {
                           </Badge>
                         ))}
                       </div>
+                    {/* Collapsible Detection Snapshot */}
+                    {upload.status === "done" && upload.detectionDetails && upload.detectionDetails.length > 0 && (
+                      <DetectionSnapshot
+                        detections={upload.detectionDetails}
+                        keyElements={upload.keyElements}
+                        isVideo={upload.file.type.startsWith("video/")}
+                      />
                     )}
                   </div>
                   <span className="text-xs font-mono text-muted-foreground">

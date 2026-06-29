@@ -15,6 +15,7 @@ import {
   GitBranch,
   Tv,
   Wifi,
+  Brain,
 } from "lucide-react";
 import { DDILStatusBar } from "@/components/DDILStatusBar";
 
@@ -22,6 +23,7 @@ const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/ingest", label: "Data Ingestion", icon: Database },
   { path: "/upload", label: "Upload & Process", icon: Upload },
+  { path: "/vision", label: "Vision Analysis", icon: Brain },
   { path: "/intent", label: "Commander's Intent", icon: Crosshair },
   { path: "/alerts", label: "Alerts", icon: AlertTriangle },
   { path: "/pipeline", label: "Event Pipeline", icon: GitBranch },
