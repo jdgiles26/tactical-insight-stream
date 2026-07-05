@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useSeenItems, useVisibilityTracker } from "@/hooks/useSeenItems";
 import {
   usePipelineStages,
@@ -21,17 +21,21 @@ import {
 } from "@/hooks/useEventBus";
 import {
   ArrowRight, Play, RefreshCw, AlertTriangle, CheckCircle2,
-  Clock, Zap, Skull, Radio, Layers, ExternalLink,
+  Clock, Zap, Skull, Radio, Layers, ExternalLink, Flame, Snowflake, Wifi,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useDDILStatus } from "@/hooks/useDDILStatus";
+import { useKeySplitter } from "@/hooks/useKeySplitter";
 
 const STAGE_COLORS: Record<string, string> = {
   ingestion: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   processing: "bg-amber-500/20 text-amber-400 border-amber-500/30",
   tagging: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+  enrichment: "bg-teal-500/20 text-teal-400 border-teal-500/30",
   correlation: "bg-purple-500/20 text-purple-400 border-purple-500/30",
   prioritization: "bg-rose-500/20 text-rose-400 border-rose-500/30",
   transport: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+  dissemination: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30",
 };
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
@@ -54,6 +58,9 @@ function EventDetailDialog({ event, open, onClose }: { event: EventBusItem | nul
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-sm font-mono">Event #{event.offset_id}</DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Pipeline event details for stage: {event.stage}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -126,6 +133,8 @@ export default function PipelinePage() {
   const { data: deadLetters = [] } = useDeadLetterQueue();
   const processEvents = useProcessEvents();
   const retryDlq = useRetryDeadLetter();
+  const { networkState, queueSummary } = useDDILStatus(5000);
+  const { hotKeyStats } = useKeySplitter();
   const [realtimeCount, setRealtimeCount] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<EventBusItem | null>(null);
 
@@ -236,13 +245,15 @@ export default function PipelinePage() {
       </div>
 
       {/* Summary Metrics */}
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-4 gap-3 lg:grid-cols-7">
         {[
           { label: "Pending", value: totalPending, icon: Clock, color: "text-muted-foreground" },
           { label: "Processing", value: totalProcessing, icon: Zap, color: "text-primary" },
           { label: "Completed", value: totalCompleted, icon: CheckCircle2, color: "text-emerald-400" },
           { label: "Retrying", value: totalRetrying, icon: RefreshCw, color: "text-amber-400" },
           { label: "Dead Letters", value: metrics?.deadLetterCount || 0, icon: Skull, color: "text-destructive" },
+          { label: "Hot Keys", value: hotKeyStats.hot, icon: Flame, color: "text-red-400" },
+          { label: "Queued", value: queueSummary.total, icon: Wifi, color: networkState.status === 'connected' ? 'text-emerald-400' : networkState.status === 'degraded' ? 'text-amber-400' : 'text-red-400' },
         ].map(({ label, value, icon: Icon, color }) => (
           <Card key={label}>
             <CardContent className="flex items-center gap-3 p-4">

@@ -14,12 +14,16 @@ import {
   AlertTriangle,
   GitBranch,
   Tv,
+  Wifi,
+  Brain,
 } from "lucide-react";
+import { DDILStatusBar } from "@/components/DDILStatusBar";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/ingest", label: "Data Ingestion", icon: Database },
   { path: "/upload", label: "Upload & Process", icon: Upload },
+  { path: "/vision", label: "Vision Analysis", icon: Brain },
   { path: "/intent", label: "Commander's Intent", icon: Crosshair },
   { path: "/alerts", label: "Alerts", icon: AlertTriangle },
   { path: "/pipeline", label: "Event Pipeline", icon: GitBranch },
@@ -69,9 +73,10 @@ export function AppSidebar() {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="border-t border-border px-5 py-3">
-        <div className="flex items-center gap-2">
+      {/* DDIL Network Status */}
+      <div className="border-t border-border px-3 py-3 space-y-2">
+        <DDILStatusBar />
+        <div className="flex items-center gap-2 px-2">
           <div className="h-2 w-2 rounded-full bg-success animate-pulse-glow" />
           <span className="text-xs font-mono text-muted-foreground">SYSTEM ONLINE</span>
         </div>

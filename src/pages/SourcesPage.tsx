@@ -1,107 +1,90 @@
 import { useState } from "react";
-import { useDataSources, useCreateDataSource, useUpdateDataSource, useDeleteDataSource, DataSource } from "@/hooks/useDataSources";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { useDataSources } from "@/hooks/useDataSources";
 import {
-  Radio, Camera, FileText, Waves, Rss, Plus, Trash2, Power, PowerOff,
-  RefreshCw, AlertTriangle, CheckCircle2, Loader2, Activity, Clock, Hash,
-  Satellite, Ship, Plane, Download, Globe2, Flame,
+  Plug,
+  Webhook,
+  Globe,
+  Rss,
+  Activity,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import SourceCard from "@/components/sources/SourceCard";
-import LiveDataPanel from "@/components/sources/LiveDataPanel";
-import SourceForm from "@/components/sources/SourceForm";
+import ApiConnectionForm from "@/components/sources/ApiConnectionForm";
+import WebhookPanel from "@/components/sources/WebhookPanel";
+import WebScraperPanel from "@/components/sources/WebScraperPanel";
+import RssFeedPanel from "@/components/sources/RssFeedPanel";
+import ActiveSourcesPanel from "@/components/sources/ActiveSourcesPanel";
 
 export default function SourcesPage() {
-  const { data: sources, isLoading } = useDataSources();
-  const createSource = useCreateDataSource();
-  const updateSource = useUpdateDataSource();
-  const deleteSource = useDeleteDataSource();
+  const { data: sources } = useDataSources();
+  const [activeTab, setActiveTab] = useState("api-connections");
 
-  const [showForm, setShowForm] = useState(false);
-
-  const handleToggle = (source: DataSource) => {
-    const newStatus = source.status === "active" ? "inactive" : "active";
-    updateSource.mutate({ id: source.id, status: newStatus } as any, {
-      onSuccess: () => toast.success(`Source ${newStatus}`),
-    });
-  };
-
-  const handleHardDelete = (id: string) => {
-    if (!confirm("Permanently delete this source and all associated data?")) return;
-    deleteSource.mutate(id, {
-      onSuccess: () => toast.success("Source permanently deleted"),
-      onError: (err) => toast.error("Delete failed: " + err.message),
-    });
-  };
-
-  const activeCount = sources?.filter(s => s.status === "active").length || 0;
-  const errorCount = sources?.filter(s => s.status === "error").length || 0;
-  const totalIngested = sources?.reduce((sum, s) => sum + (s.total_ingested || 0), 0) || 0;
+  const activeCount = sources?.filter((s) => s.status === "active").length || 0;
+  const totalCount = sources?.length || 0;
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Data Sources</h2>
-          <p className="text-sm text-muted-foreground font-mono">Configure, monitor, and ingest from live data feeds</p>
-        </div>
-        <Button onClick={() => setShowForm(!showForm)}>
-          <Plus className="mr-2 h-4 w-4" /> Add Source
-        </Button>
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">Data Sources</h2>
+        <p className="text-sm text-muted-foreground font-mono">
+          Configure, monitor, and ingest from live data feeds
+        </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        {[
-          { label: "Total Sources", value: sources?.length || 0 },
-          { label: "Active", value: activeCount },
-          { label: "Errors", value: errorCount },
-          { label: "Total Ingested", value: totalIngested.toLocaleString() },
-        ].map(({ label, value }) => (
-          <div key={label} className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs font-mono uppercase text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold text-foreground">{value}</p>
-          </div>
-        ))}
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="w-full justify-start bg-muted/50 border border-border">
+          <TabsTrigger value="api-connections" className="flex items-center gap-1.5 data-[state=active]:bg-background">
+            <Plug className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">API Connections</span>
+            <span className="sm:hidden">API</span>
+          </TabsTrigger>
+          <TabsTrigger value="webhooks" className="flex items-center gap-1.5 data-[state=active]:bg-background">
+            <Webhook className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Webhooks</span>
+            <span className="sm:hidden">Hooks</span>
+          </TabsTrigger>
+          <TabsTrigger value="web-scraper" className="flex items-center gap-1.5 data-[state=active]:bg-background">
+            <Globe className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Web Scraper</span>
+            <span className="sm:hidden">Scrape</span>
+          </TabsTrigger>
+          <TabsTrigger value="rss-feeds" className="flex items-center gap-1.5 data-[state=active]:bg-background">
+            <Rss className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">RSS Feeds</span>
+            <span className="sm:hidden">RSS</span>
+          </TabsTrigger>
+          <TabsTrigger value="active-sources" className="flex items-center gap-1.5 data-[state=active]:bg-background">
+            <Activity className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Active Sources</span>
+            <span className="sm:hidden">Active</span>
+            {totalCount > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] justify-center text-[10px] font-mono">
+                {activeCount}/{totalCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Live Data Ingestion */}
-      <LiveDataPanel />
+        <TabsContent value="api-connections" className="mt-4">
+          <ApiConnectionForm />
+        </TabsContent>
 
-      {/* Create Form */}
-      {showForm && (
-        <SourceForm
-          createSource={createSource}
-          onClose={() => setShowForm(false)}
-        />
-      )}
+        <TabsContent value="webhooks" className="mt-4">
+          <WebhookPanel />
+        </TabsContent>
 
-      {/* Source Cards */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : !sources?.length ? (
-        <div className="rounded-lg border border-dashed border-border p-12 text-center">
-          <Radio className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">No data sources configured yet</p>
-          <p className="text-xs text-muted-foreground mt-1">Use the live data sources above or add a custom source</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {sources.map(source => (
-            <SourceCard
-              key={source.id}
-              source={source}
-              onToggle={() => handleToggle(source)}
-              onDelete={() => handleHardDelete(source.id)}
-            />
-          ))}
-        </div>
-      )}
+        <TabsContent value="web-scraper" className="mt-4">
+          <WebScraperPanel />
+        </TabsContent>
+
+        <TabsContent value="rss-feeds" className="mt-4">
+          <RssFeedPanel />
+        </TabsContent>
+
+        <TabsContent value="active-sources" className="mt-4">
+          <ActiveSourcesPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

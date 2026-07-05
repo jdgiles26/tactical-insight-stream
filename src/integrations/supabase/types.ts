@@ -44,6 +44,174 @@ export type Database = {
         }
         Relationships: []
       }
+      emergency_triggers: {
+        Row: {
+          id: string
+          data_product_id: string | null
+          trigger_type: string
+          sentiment_score: number | null
+          urgency_level: string
+          key_elements: Json
+          commander_intent: string | null
+          is_active: boolean
+          raw_text_excerpt: string | null
+          created_at: string
+          deactivated_at: string | null
+        }
+        Insert: {
+          id?: string
+          data_product_id?: string | null
+          trigger_type: string
+          sentiment_score?: number | null
+          urgency_level?: string
+          key_elements?: Json
+          commander_intent?: string | null
+          is_active?: boolean
+          raw_text_excerpt?: string | null
+          created_at?: string
+          deactivated_at?: string | null
+        }
+        Update: {
+          id?: string
+          data_product_id?: string | null
+          trigger_type?: string
+          sentiment_score?: number | null
+          urgency_level?: string
+          key_elements?: Json
+          commander_intent?: string | null
+          is_active?: boolean
+          raw_text_excerpt?: string | null
+          created_at?: string
+          deactivated_at?: string | null
+        }
+        Relationships: []
+      }
+      mission_groups: {
+        Row: {
+          id: string
+          group_name: string
+          trigger_id: string | null
+          confidence: string
+          risk_level: string
+          correlation_method: string | null
+          summary: string | null
+          prediction: Json
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          group_name: string
+          trigger_id?: string | null
+          confidence?: string
+          risk_level?: string
+          correlation_method?: string | null
+          summary?: string | null
+          prediction?: Json
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          group_name?: string
+          trigger_id?: string | null
+          confidence?: string
+          risk_level?: string
+          correlation_method?: string | null
+          summary?: string | null
+          prediction?: Json
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
+      group_evidence: {
+        Row: {
+          id: string
+          group_id: string
+          evidence_type: string
+          source_ref: string | null
+          data_product_id: string | null
+          registry_entry_id: string | null
+          description: string | null
+          timestamp_ref: string | null
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          evidence_type: string
+          source_ref?: string | null
+          data_product_id?: string | null
+          registry_entry_id?: string | null
+          description?: string | null
+          timestamp_ref?: string | null
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          evidence_type?: string
+          source_ref?: string | null
+          data_product_id?: string | null
+          registry_entry_id?: string | null
+          description?: string | null
+          timestamp_ref?: string | null
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
+      silent_object_registry: {
+        Row: {
+          id: string
+          object_uid: string
+          label: string
+          confidence: number | null
+          bounding_box: Json
+          source_type: string
+          data_product_id: string | null
+          first_seen_at: string
+          last_seen_at: string
+          seen_count: number
+          frame_metadata: Json
+          is_matched: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          object_uid: string
+          label: string
+          confidence?: number | null
+          bounding_box?: Json
+          source_type?: string
+          data_product_id?: string | null
+          first_seen_at?: string
+          last_seen_at?: string
+          seen_count?: number
+          frame_metadata?: Json
+          is_matched?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          object_uid?: string
+          label?: string
+          confidence?: number | null
+          bounding_box?: Json
+          source_type?: string
+          data_product_id?: string | null
+          first_seen_at?: string
+          last_seen_at?: string
+          seen_count?: number
+          frame_metadata?: Json
+          is_matched?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
       correlation_alerts: {
         Row: {
           acknowledged: boolean

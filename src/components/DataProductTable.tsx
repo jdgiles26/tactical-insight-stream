@@ -1,7 +1,11 @@
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useMemo } from "react";
 import { StatusBadge } from "./StatusBadge";
+import GeoCorrelationBadge from "./GeoCorrelationBadge";
+import { KeySplitIndicator } from "./KeySplitIndicator";
+import { MapPin } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useSeenItems, useVisibilityTracker } from "@/hooks/useSeenItems";
+import { keySplitter } from "@/lib/keySplitter";
 
 interface DataProduct {
   id: string;
@@ -13,6 +17,7 @@ interface DataProduct {
   priority_score: number | null;
   confidence_score: number | null;
   created_at: string;
+  [key: string]: unknown; // allow extra fields for drilldown
 }
 
 export function DataProductTable({
@@ -59,6 +64,10 @@ export function DataProductTable({
             <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-muted-foreground">Status</th>
             <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-muted-foreground">Priority</th>
             <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-muted-foreground">Score</th>
+            <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />Geo</span>
+            </th>
+            <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-muted-foreground">Key</th>
             <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-muted-foreground">Time</th>
           </tr>
         </thead>
@@ -101,6 +110,12 @@ export function DataProductTable({
                   <span className="font-mono text-xs text-foreground">
                     {item.priority_score != null ? `${(Number(item.priority_score) * 100).toFixed(0)}%` : "—"}
                   </span>
+                </td>
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <GeoCorrelationBadge productId={item.id} compact />
+                </td>
+                <td className="px-4 py-3">
+                  <KeySplitIndicator result={keySplitter.classify(item)} compact />
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}

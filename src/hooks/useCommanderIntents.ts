@@ -15,12 +15,17 @@ export function useCommanderIntents() {
   return useQuery({
     queryKey: ["commander_intents"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("commander_intents")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as unknown as CommanderIntent[];
+      try {
+        const { data, error } = await supabase
+          .from("commander_intents")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (error) { console.warn('[useCommanderIntents]', error.message); return []; }
+        return data as unknown as CommanderIntent[];
+      } catch (e) {
+        console.warn('[useCommanderIntents] Failed:', e);
+        return [];
+      }
     },
   });
 }

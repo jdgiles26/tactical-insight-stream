@@ -22,6 +22,8 @@ export default function SourceForm({ createSource, onClose }: { createSource: an
   const [authType, setAuthType] = useState("none");
   const [maxRetries, setMaxRetries] = useState("5");
   const [retryDelay, setRetryDelay] = useState("30");
+  const [defaultLat, setDefaultLat] = useState("");
+  const [defaultLng, setDefaultLng] = useState("");
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +36,9 @@ export default function SourceForm({ createSource, onClose }: { createSource: an
       status: "inactive",
       max_retries: parseInt(maxRetries) || 5,
       retry_delay_seconds: parseInt(retryDelay) || 30,
+      config: {
+        ...(defaultLat && defaultLng ? { default_latitude: parseFloat(defaultLat), default_longitude: parseFloat(defaultLng) } : {}),
+      },
     } as any, {
       onSuccess: () => {
         onClose();
@@ -62,6 +67,16 @@ export default function SourceForm({ createSource, onClose }: { createSource: an
         <div>
           <label className="mb-1 block text-xs font-mono uppercase text-muted-foreground">Endpoint URL</label>
           <Input value={endpointUrl} onChange={e => setEndpointUrl(e.target.value)} placeholder="rtsp://192.168.1.100:554/stream or https://..." className="bg-secondary border-border" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block text-xs font-mono uppercase text-muted-foreground">Default Latitude</label>
+            <Input type="number" step="any" value={defaultLat} onChange={e => setDefaultLat(e.target.value)} placeholder="e.g. 34.0522" className="bg-secondary border-border" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-mono uppercase text-muted-foreground">Default Longitude</label>
+            <Input type="number" step="any" value={defaultLng} onChange={e => setDefaultLng(e.target.value)} placeholder="e.g. -118.2437" className="bg-secondary border-border" />
+          </div>
         </div>
         <div className="grid grid-cols-3 gap-4">
           <div>
