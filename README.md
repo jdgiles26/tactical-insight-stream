@@ -1,5 +1,5 @@
 # Tactical Insight Stream — MDG v2
-
+URL: tactical-insight-stream.vercel.app
 **Mission Data Grid v2** is an AI-native tactical intelligence aggregation and real-time correlation platform. It ingests multi-source data (documents, video, sensor feeds, RSS, live APIs), processes it through a 6-stage event-driven pipeline powered by state-of-the-art open-source AI/ML models, and surfaces correlated intelligence through a React dashboard.
 
 ---
