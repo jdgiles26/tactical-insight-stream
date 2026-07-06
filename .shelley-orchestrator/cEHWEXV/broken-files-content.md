@@ -17,12 +17,12 @@ export const supabase = localSupabase as any;
 
 ```
 VITE_SUPABASE_URL="https://eijzksdaciunejjrgpoa.supabase.co"
-VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY="sb_publishable_laUETnIXs8HNBGx4S5Cv1Q_7HQdtPVb"
-DATABASE_URL="postgresql://postgres:amethystMarie2024!!@db.eijzksdaciunejjrgpoa.supabase.co:5432/postgres"
-ANTHROPIC_API_KEY="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"
-HUGGINGFACE_API_KEY="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"
+VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY="sb_publishable_laUETnb"
+DATABASE_URL="postgresql://postgres:amethystMarie2024!!@db./postgres"
+ANTHROPIC_API_KEY="sk-ant-api03-eY_RAWLwKvoVynb4qJxmffUWvOySnXJlHodG_9lIBiX3lUCC9cN9FNAUew4P2FH"
+HUGGINGFACE_API_KEY="hf_XbuY"
 
-VITE_HUGGINGFACE_API_KEY="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"
+VITE_HUGGINGFACE_API_KEY="hf_Xbu"
 ```
 
 ## 3. src/hooks/useEventBus.ts
