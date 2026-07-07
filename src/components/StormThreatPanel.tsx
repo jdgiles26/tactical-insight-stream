@@ -21,6 +21,15 @@ const TrendIcon = ({ trend }: { trend: string }) => {
   if (trend === "rising") return <TrendingUp className="h-3 w-3 text-warning" />;
   if (trend === "falling") return <TrendingDown className="h-3 w-3 text-emerald-400" />;
   return <Minus className="h-3 w-3 text-muted-foreground" />;
+
+type ThreatLevel = "MINIMAL" | "GUARDED" | "ELEVATED" | "HIGH" | "SEVERE";
+
+const THREAT_CONFIG: Record<ThreatLevel, { color: string; bg: string; border: string; icon: string }> = {
+  MINIMAL:  { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30", icon: "🟢" },
+  GUARDED:  { color: "text-sky-400",     bg: "bg-sky-500/10",     border: "border-sky-500/30",     icon: "🔵" },
+  ELEVATED: { color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   icon: "🟡" },
+  HIGH:     { color: "text-orange-400",   bg: "bg-orange-500/10",  border: "border-orange-500/30",  icon: "🟠" },
+  SEVERE:   { color: "text-red-400",      bg: "bg-red-500/10",     border: "border-red-500/30",     icon: "🔴" },
 };
 
 /* ── Sensor row ── */
@@ -118,6 +127,10 @@ export default function StormThreatPanel() {
       if (curr === "SEVERE") playAlertSound("severe");
       else if (curr === "HIGH") playAlertSound("high");
       else if (curr === "ELEVATED") playAlertSound("elevated");
+    if (prev && LEVEL_ORDER.indexOf(curr) > LEVEL_ORDER.indexOf(prev)) {
+      // Play audio alert for HIGH and SEVERE escalations
+      if (curr === "SEVERE") playAlertSound("severe");
+      else if (curr === "HIGH") playAlertSound("high");
 
       toast.error(`⚠️ STORM THREAT ESCALATED: ${prev} → ${curr}`, {
         description: assessment.details.join(" • "),
