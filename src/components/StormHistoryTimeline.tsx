@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useStormHistory, type StormSnapshot } from "@/hooks/useStormHistory";
 import { format } from "date-fns";
 import {
@@ -5,21 +6,21 @@ import {
   CartesianGrid,
 } from "recharts";
 import { Clock, TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { LEVEL_HEX } from "@/lib/stormAssessment";
 
-const LEVEL_SCORE: Record<string, number> = {
-  MINIMAL: 0, GUARDED: 1, ELEVATED: 2, HIGH: 3, SEVERE: 4,
-};
-const LEVEL_COLOR: Record<string, string> = {
-  MINIMAL: "#34d399", GUARDED: "#38bdf8", ELEVATED: "#fbbf24", HIGH: "#fb923c", SEVERE: "#f87171",
-};
-
+/* ── Trend badge using weighted recent history ── */
 function TrendBadge({ history }: { history: StormSnapshot[] }) {
-  if (history.length < 2) return null;
-  const recent = history.slice(-3);
-  const first = recent[0].score;
-  const last = recent[recent.length - 1].score;
-  const diff = last - first;
+  if (history.length < 3) return null;
+  // Use last 5 snapshots for a smoother trend signal
+  const recent = history.slice(-5);
+  const weights = recent.map((_, i) => i + 1); // later snapshots weighted higher
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  const weightedFirst = recent.slice(0, Math.ceil(recent.length / 2));
+  const weightedLast = recent.slice(Math.floor(recent.length / 2));
+  const avgFirst = weightedFirst.reduce((s, r) => s + r.score, 0) / weightedFirst.length;
+  const avgLast = weightedLast.reduce((s, r) => s + r.score, 0) / weightedLast.length;
+  const diff = Math.round(avgLast - avgFirst);
 
   if (Math.abs(diff) < 3) {
     return (
@@ -48,7 +49,7 @@ const CustomTooltip = ({ active, payload }: any) => {
   return (
     <div className="rounded-lg border border-border bg-card p-3 text-xs shadow-lg space-y-1">
       <p className="font-mono text-muted-foreground">{d.time}</p>
-      <p className="font-bold" style={{ color: LEVEL_COLOR[d.level] || "#6b7280" }}>
+      <p className="font-bold" style={{ color: LEVEL_HEX[d.level] || "#6b7280" }}>
         {d.level} — Score {d.score}/100
       </p>
       <p className="text-muted-foreground">
@@ -64,7 +65,7 @@ const CustomTooltip = ({ active, payload }: any) => {
 export default function StormHistoryTimeline() {
   const { data: history = [], isLoading } = useStormHistory(48);
 
-  const chartData = history.map((h) => ({
+  const chartData = useMemo(() => history.map((h) => ({
     time: format(new Date(h.recorded_at), "MMM d HH:mm"),
     score: h.score,
     level: h.threat_level,
@@ -73,7 +74,12 @@ export default function StormHistoryTimeline() {
     high: h.high_count,
     avgWater: h.avg_water_level,
     maxWater: h.max_water_level,
-  }));
+  })), [history]);
+
+  const recentSnapshots = useMemo(
+    () => history.slice().reverse().slice(0, 10),
+    [history]
+  );
 
   if (isLoading) {
     return (
@@ -91,6 +97,9 @@ export default function StormHistoryTimeline() {
           <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
             Storm Threat History (48h)
           </span>
+          <Badge variant="outline" className="text-[10px]">
+            {history.length} snapshot{history.length !== 1 ? "s" : ""}
+          </Badge>
         </div>
         <TrendBadge history={history} />
       </div>
@@ -136,7 +145,7 @@ export default function StormHistoryTimeline() {
                 strokeWidth={2}
                 fill="url(#scoreGrad)"
                 dot={(props: any) => {
-                  const color = LEVEL_COLOR[props.payload?.level] || "hsl(var(--primary))";
+                  const color = LEVEL_HEX[props.payload?.level] || "hsl(var(--primary))";
                   return (
                     <circle
                       key={props.index}
@@ -153,18 +162,14 @@ export default function StormHistoryTimeline() {
             </AreaChart>
           </ResponsiveContainer>
 
-          {/* Recent snapshots list */}
-          {history.length > 0 && (
+          {recentSnapshots.length > 0 && (
             <div className="mt-3 space-y-1 max-h-[120px] overflow-y-auto">
-              {history.slice().reverse().slice(0, 10).map((h) => (
+              {recentSnapshots.map((h) => (
                 <div key={h.id} className="flex items-center justify-between text-[11px] px-2 py-1 rounded bg-secondary/30">
                   <span className="font-mono text-muted-foreground">
                     {format(new Date(h.recorded_at), "MMM d HH:mm")}
                   </span>
-                  <span
-                    className="font-bold"
-                    style={{ color: LEVEL_COLOR[h.threat_level] || "#6b7280" }}
-                  >
+                  <span className="font-bold" style={{ color: LEVEL_HEX[h.threat_level] || "#6b7280" }}>
                     {h.threat_level}
                   </span>
                   <span className="font-mono text-muted-foreground">{h.score}/100</span>
