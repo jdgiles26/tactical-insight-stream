@@ -151,10 +151,10 @@ export default function RssFeedPanel() {
         try {
           const textForScoring = `${item.title || ""} ${item.description || ""}`;
           const priority_score = computePriorityScore(textForScoring);
-          const priority_level = scoreToPriorityLevel(priority_score);
+          const priority = scoreToPriorityLevel(priority_score);
           const { error } = await supabase.from("data_products").insert({
             title: item.title,
-            source_type: "rss_feed",
+            source_type: "document",
             source_identifier: feed.id,
             status: "ingested",
             content: {
@@ -169,7 +169,7 @@ export default function RssFeedPanel() {
             },
             confidence_score: 0.6,
             priority_score,
-            priority_level,
+            priority,
           } as any);
           if (!error) ingested++;
         } catch { /* skip individual item errors */ }

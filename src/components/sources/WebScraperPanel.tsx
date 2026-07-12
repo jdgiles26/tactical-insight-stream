@@ -113,7 +113,7 @@ export default function WebScraperPanel() {
     try {
       const textForScoring = `${result.title} ${result.content}`;
       const priority_score = computePriorityScore(textForScoring);
-      const priority_level = scoreToPriorityLevel(priority_score);
+      const priority = scoreToPriorityLevel(priority_score);
       const { error } = await supabase.from("data_products").insert({
         title: `[Scraped] ${result.title}`,
         source_type: "document",
@@ -133,7 +133,7 @@ export default function WebScraperPanel() {
         },
         confidence_score: 0.7,
         priority_score,
-        priority_level,
+        priority,
       } as any);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["data_products"] });
